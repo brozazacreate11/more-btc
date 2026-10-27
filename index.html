@@ -174,7 +174,7 @@
       <p class="hint">Пример: всеки месец на 20-о число през последните 5 години. Ако денят не е работен (за MSTR), покупката е на следващия.</p>
       <div class="form">
         <div class="field"><label>Актив</label><select id="dAsset"><option>BTC</option><option>MSTR</option></select></div>
-        <div class="field"><label>Сума на покупка</label><input id="dAmt" type="number" inputmode="decimal" value="100" min="1"></div>
+        <div class="field"><label>Сума на покупка</label><input id="dAmt" type="text" inputmode="decimal" autocomplete="off" value="100"></div>
         <div class="field"><label>Валута</label><select id="dCur"><option>EUR</option><option>USD</option></select></div>
         <div class="field"><label>Ден от месеца</label><select id="dDom"></select></div>
         <div class="field"><label>От дата</label><input id="dFrom" type="date"></div>
@@ -185,7 +185,7 @@
           <option value="fear">Само при Fear &amp; Greed ≤ праг</option>
           <option value="score">Само при сигнал ≤ праг</option>
         </select></div>
-        <div class="field" id="dThrWrap" hidden><label>Праг</label><input id="dThr" type="number" value="30" min="0" max="100"></div>
+        <div class="field" id="dThrWrap" hidden><label>Праг</label><input id="dThr" type="text" inputmode="decimal" autocomplete="off" value="30"></div>
       </div>
       <div class="stats" id="dRes"></div>
       <div class="chart"><canvas id="cDca"></canvas></div>
@@ -226,7 +226,7 @@
       <h2>Сравнение на стратегии за натрупване</h2>
       <p class="hint">Една и съща базова месечна сума, различни правила. Гледай „сатоши за 1 €/$“: колкото повече, толкова по-ефективно е натрупването.</p>
       <div class="form">
-        <div class="field"><label>Базова сума / месец</label><input id="sAmt" type="number" value="100" min="1"></div>
+        <div class="field"><label>Базова сума / месец</label><input id="sAmt" type="text" inputmode="decimal" autocomplete="off" value="100"></div>
         <div class="field"><label>Валута</label><select id="sCur"><option>EUR</option><option>USD</option></select></div>
         <div class="field"><label>Ден от месеца</label><select id="sDom"></select></div>
         <div class="field"><label>От дата</label><input id="sFrom" type="date"></div>
@@ -301,7 +301,7 @@
     <div class="small muted" id="keyStatus" style="margin-top:6px"></div>
 
     <h3>Strategy (MSTR): брой биткойни</h3>
-    <div class="row"><div class="field" style="flex:1"><input id="setHold" type="number" min="0"></div><button class="btn sm ghost" id="saveHold">Запази</button></div>
+    <div class="row"><div class="field" style="flex:1"><input id="setHold" type="text" inputmode="decimal" autocomplete="off"></div><button class="btn sm ghost" id="saveHold">Запази</button></div>
     <p class="small muted">Използва се за mNAV и BTC на акция. Актуалната стойност е на strategy.com.</p>
 
     <h3>Аларми</h3>
@@ -311,7 +311,7 @@
         <option value="mstr_above">MSTR над ($)</option><option value="mstr_below">MSTR под ($)</option>
         <option value="fng_below">Fear &amp; Greed под</option><option value="score_below">Сигнал под</option><option value="score_above">Сигнал над</option>
       </select></div>
-      <div class="field" style="flex:1"><input id="alVal" type="number" inputmode="decimal" placeholder="стойност"></div>
+      <div class="field" style="flex:1"><input id="alVal" type="text" inputmode="decimal" autocomplete="off" placeholder="стойност"></div>
       <button class="btn sm" id="addAlert">Добави</button>
     </div>
     <div id="alertList"></div>

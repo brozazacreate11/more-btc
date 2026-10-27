@@ -24,7 +24,19 @@ function money(n, cur = 'USD', dec) {
   return cur === 'EUR' ? `${neg}${s} €` : `${neg}$${s}`;
 }
 const pct = (n, dec = 2) => (n == null || !isFinite(n)) ? '—' : (n >= 0 ? '+' : '−') + nf(Math.abs(n), dec) + '%';
-const fmtBtc = n => nf(n, n === 0 ? 0 : Math.abs(n) < 1 ? 6 : 4);
+const fmtBtc = n => nf(n, n === 0 ? 0 : Math.abs(n) < 0.01 ? 8 : Math.abs(n) < 1 ? 6 : 4);
+// Число от поле за въвеждане. Приема и запетая, и точка (0,01 или 0.01), интервали, минус, € $ %.
+// Полетата са type="text", защото на iPhone с български език type="number" не приема запетая.
+function num(v) {
+  let s = String(v ?? '').trim().replace(/[\s  '€$%]/g, '').replace(/[−–]/g, '-');
+  if (!s) return NaN;
+  const lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+  if (lc > -1 && ld > -1) s = lc > ld ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, ''); // 1.234,5 или 1,234.5
+  else if (lc > -1) s = s.indexOf(',') !== lc ? s.replace(/,/g, '') : s.replace(',', '.');        // 1,234,567 или 0,01
+  return Number(s);
+}
+// стойност за показване в поле: с десетична запетая и без излишни нули
+const fmtIn = n => n ? (+n).toFixed(8).replace(/\.?0+$/, '').replace('.', ',') : '';
 const fmtShort = (v, cur = 'USD') => {
   const a = Math.abs(v); let s;
   if (a >= 1e12) s = nf(v / 1e12, 2) + ' трлн'; else if (a >= 1e9) s = nf(v / 1e9, 1) + ' млрд';
@@ -598,12 +610,12 @@ function fillDays(sel, def = 20) {
 const statBox = (k, v, s = '', c = '') => `<div class="stat"><div class="k">${k}</div><div class="v ${c}">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`;
 
 function calcDca() {
-  const asset = $('#dAsset').value, cur = $('#dCur').value, filter = $('#dFilter').value, thr = +$('#dThr').value;
+  const asset = $('#dAsset').value, cur = $('#dCur').value, filter = $('#dFilter').value, thr = isFinite(num($('#dThr').value)) ? num($('#dThr').value) : 30;
   $('#dThrWrap').hidden = !(filter === 'fear' || filter === 'score');
   const mult = filter === 'bear' ? d => regime(d, 'bear') ? 1 : 0
     : filter === 'fear' ? d => { const f = fngAt(d); return f != null && f <= thr ? 1 : 0; }
     : filter === 'score' ? d => scoreOnDay(d) <= thr ? 1 : 0 : () => 1;
-  const r = dca({ asset, cur, amount: +$('#dAmt').value || 0, dom: $('#dDom').value, from: isoToDay($('#dFrom').value), to: isoToDay($('#dTo').value), mult });
+  const r = dca({ asset, cur, amount: num($('#dAmt').value) || 0, dom: $('#dDom').value, from: isoToDay($('#dFrom').value), to: isoToDay($('#dTo').value), mult });
   const unit = asset === 'BTC' ? 'BTC' : 'акции';
   const sats = asset === 'BTC' && r.inv ? nf(r.units * 1e8 / r.inv, 0) : null;
   $('#dRes').innerHTML = [
@@ -708,7 +720,7 @@ function calcMonths() {
 }
 
 function calcStrat() {
-  const cur = $('#sCur').value, amount = +$('#sAmt').value || 0, dom = $('#sDom').value, from = isoToDay($('#sFrom').value), to = isoToDay($('#sTo').value);
+  const cur = $('#sCur').value, amount = num($('#sAmt').value) || 0, dom = $('#sDom').value, from = isoToDay($('#sFrom').value), to = isoToDay($('#sTo').value);
   const fngMult = d => { const f = fngAt(d); if (f == null) return 1; return f < 25 ? 2 : f < 45 ? 1.5 : f < 55 ? 1 : f < 75 ? 0.5 : 0.25; };
   const scMult = d => { const s = scoreOnDay(d); return s < 20 ? 3 : s < 40 ? 2 : s < 60 ? 1 : s < 80 ? 0.5 : 0; };
   const strats = [
@@ -778,29 +790,41 @@ function posForm(asset) {
     ${asset === 'MSTR' && p.qty && Live.shares ? `<div class="small muted" style="margin-top:4px">≈ ${fmtBtc(p.qty * settings.holdings / Live.shares)} BTC експозиция през Strategy</div>` : ''}
     <h3>Редактирай позицията</h3>
     <div class="form" style="margin-bottom:8px">
-      <div class="field"><label>Количество (${unit})</label><input data-f="qty" type="number" inputmode="decimal" step="any" min="0" value="${p.qty || ''}"></div>
+      <div class="field"><label>Количество (${unit})</label><input data-f="qty" type="text" inputmode="decimal" autocomplete="off" placeholder="${asset === 'BTC' ? '0,01' : '10'}" value="${fmtIn(p.qty)}"></div>
       <div class="field"><label>Въвеждам</label><select data-f="mode"><option value="avg">Средна цена</option><option value="pct">% печалба (от Revolut)</option><option value="cost">Общо вложено</option></select></div>
-      <div class="field"><label data-f="lbl">Средна цена</label><input data-f="val" type="number" inputmode="decimal" step="any" value="${p.avg ? +p.avg.toFixed(2) : ''}"></div>
+      <div class="field"><label data-f="lbl">Средна цена</label><input data-f="val" type="text" inputmode="decimal" autocomplete="off" value="${p.avg ? fmtIn(+p.avg.toFixed(2)) : ''}"></div>
       <div class="field"><label>Валута</label><select data-f="cur"><option ${p.cur === 'EUR' ? 'selected' : ''}>EUR</option><option ${p.cur === 'USD' ? 'selected' : ''}>USD</option></select></div>
     </div>
     <div class="row"><button class="btn sm" data-f="save">Запази</button></div>
     <h3>Добави нова покупка</h3>
     <div class="form" style="margin-bottom:8px">
-      <div class="field"><label>Купено количество</label><input data-f="bq" type="number" inputmode="decimal" step="any" min="0"></div>
-      <div class="field"><label>Цена на покупка (${p.cur})</label><input data-f="bp" type="number" inputmode="decimal" step="any" min="0" placeholder="${nf(price, 2)}"></div>
+      <div class="field"><label>Купено количество</label><input data-f="bq" type="text" inputmode="decimal" autocomplete="off" placeholder="${asset === 'BTC' ? '0,01' : '1'}"></div>
+      <div class="field"><label>Цена на покупка (${p.cur})</label><input data-f="bp" type="text" inputmode="decimal" autocomplete="off" placeholder="${nf(price, 2)}"></div>
     </div>
     <button class="btn sm ghost" data-f="buy">Добави към позицията</button>`;
   const f = n => $(`[data-f="${n}"]`, el);
-  f('mode').onchange = () => { const m = f('mode').value; f('lbl').textContent = m === 'avg' ? 'Средна цена' : m === 'pct' ? 'Печалба/загуба в % (напр. 12.5 или -8)' : 'Общо вложено'; f('val').value = ''; };
+  f('mode').onchange = () => {
+    const m = f('mode').value, inp = f('val');
+    f('lbl').textContent = m === 'avg' ? 'Средна цена' : m === 'pct' ? 'Печалба/загуба в %' : 'Общо вложено';
+    inp.inputMode = m === 'pct' ? 'text' : 'decimal'; // за загуба трябва минус, а цифровата клавиатура на iPhone няма минус
+    inp.placeholder = m === 'pct' ? 'напр. 12,5 или -8,3' : '';
+    inp.value = '';
+  };
   f('save').onclick = () => {
-    const qty = +f('qty').value || 0, v = parseFloat(f('val').value), c = f('cur').value, m = f('mode').value, pr = livePrice(asset, c);
+    const qs = f('qty').value.trim(), vs = f('val').value.trim();
+    const qty = qs ? num(qs) : 0, v = num(vs), c = f('cur').value, m = f('mode').value, pr = livePrice(asset, c);
+    if (!isFinite(qty) || qty < 0) return toast('Невалидно количество. Пример: 0,01');
+    if (vs && !isFinite(v)) return toast('Невалидна стойност. Пример: 12,5');
+    if (m === 'pct' && v <= -100) return toast('Загубата не може да е 100% или повече');
     let avg = p.avg;
     if (isFinite(v)) avg = m === 'avg' ? v : m === 'pct' ? pr / (1 + v / 100) : (qty ? v / qty : 0);
     if (c !== p.cur && !isFinite(v)) avg = c === 'EUR' ? p.avg / (Live.fx || fxAt(today())) : p.avg * (Live.fx || fxAt(today()));
     Object.assign(p, { qty, avg, cur: c }); savePortfolio(); renderPortfolio(); toast('Запазено ✓');
   };
   f('buy').onclick = () => {
-    const q = +f('bq').value, bp = +f('bp').value || price; if (!(q > 0)) return toast('Въведи количество');
+    const q = num(f('bq').value), bs = f('bp').value.trim(), bp = bs ? num(bs) : price;
+    if (!(q > 0)) return toast('Въведи количество. Пример: 0,01');
+    if (!(bp > 0)) return toast('Невалидна цена');
     const nq = p.qty + q; p.avg = (p.qty * p.avg + q * bp) / nq; p.qty = nq; savePortfolio(); renderPortfolio(); toast('Покупката е добавена ✓');
   };
 }
@@ -903,8 +927,8 @@ function wireSettings() {
   document.addEventListener('click', e => { if (e.target.closest('[data-open-settings]')) { e.preventDefault(); openSettings(); } });
   $('#closeSettings').onclick = () => $('#settings').close();
   $('#saveKey').onclick = () => { settings.key = $('#setKey').value.trim(); saveSettings(); Live.mcap = Live.shares = null; Live.lastMstr = 0; $('#keyStatus').textContent = 'Проверка…'; connectFinnhub(); pollMstr(); };
-  $('#saveHold').onclick = () => { settings.holdings = +$('#setHold').value || settings.holdings; saveSettings(); dirty = true; toast('Запазено ✓'); };
-  $('#addAlert').onclick = () => { const v = parseFloat($('#alVal').value); if (!isFinite(v)) return toast('Въведи стойност'); alerts.push({ type: $('#alType').value, value: v, fired: false }); LS.set('alerts', alerts); $('#alVal').value = ''; renderAlerts(); };
+  $('#saveHold').onclick = () => { settings.holdings = num($('#setHold').value) || settings.holdings; saveSettings(); dirty = true; toast('Запазено ✓'); };
+  $('#addAlert').onclick = () => { const v = num($('#alVal').value); if (!isFinite(v)) return toast('Въведи стойност'); alerts.push({ type: $('#alType').value, value: v, fired: false }); LS.set('alerts', alerts); $('#alVal').value = ''; renderAlerts(); };
   $('#alertList').onclick = e => {
     const d = e.target.dataset.del, r = e.target.dataset.rearm;
     if (d != null) alerts.splice(+d, 1); else if (r != null) alerts[+r].fired = false; else return;
