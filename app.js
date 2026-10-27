@@ -1,6 +1,6 @@
 'use strict';
 /* More BTC: всичко работи в браузъра. Личните данни са само в localStorage на устройството. */
-const APP_VERSION = '4'; // същият номер като CACHE в sw.js
+const APP_VERSION = '5'; // същият номер като CACHE в sw.js
 
 // ============================================================ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -9,20 +9,20 @@ const DAY = 86400000;
 const today = () => Math.floor(Date.now() / DAY);
 const pad = n => String(n).padStart(2, '0');
 const dDate = d => new Date(d * DAY);
-const fmtDate = d => { const x = dDate(d); return `${pad(x.getUTCDate())}.${pad(x.getUTCMonth() + 1)}.${x.getUTCFullYear()}`; };
-const fmtMonY = d => { const x = dDate(d); return `${pad(x.getUTCMonth() + 1)}.${x.getUTCFullYear()}`; };
+const dSep = () => LANG === 'en' ? '/' : '.';
+const fmtDate = d => { const x = dDate(d); return `${pad(x.getUTCDate())}${dSep()}${pad(x.getUTCMonth() + 1)}${dSep()}${x.getUTCFullYear()}`; };
+const fmtMonY = d => { const x = dDate(d); return `${pad(x.getUTCMonth() + 1)}${dSep()}${x.getUTCFullYear()}`; };
 const isoToDay = s => Math.floor(Date.parse(s + 'T00:00:00Z') / DAY);
 const dayToIso = d => dDate(d).toISOString().slice(0, 10);
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
-const MONTHS = ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
-const WEEKDAYS = ['Пон', 'Вт', 'Ср', 'Чет', 'Пет', 'Съб', 'Нед'];
 
-const nf = (n, dec = 0) => Number(n).toLocaleString('bg-BG', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const nf = (n, dec = 0) => Number(n).toLocaleString(loc(), { minimumFractionDigits: dec, maximumFractionDigits: dec });
 function money(n, cur = 'USD', dec) {
   if (n == null || !isFinite(n)) return '—';
   if (dec == null) dec = Math.abs(n) >= 1000 ? 0 : Math.abs(n) >= 1 ? 2 : 4;
   const s = nf(Math.abs(n), dec), neg = n < 0 ? '−' : '';
-  return cur === 'EUR' ? `${neg}${s} €` : `${neg}$${s}`;
+  if (cur === 'EUR') return LANG === 'en' ? `${neg}€${s}` : `${neg}${s} €`;
+  return `${neg}$${s}`;
 }
 const pct = (n, dec = 2) => (n == null || !isFinite(n)) ? '—' : (n >= 0 ? '+' : '−') + nf(Math.abs(n), dec) + '%';
 const fmtBtc = n => nf(n, n === 0 ? 0 : Math.abs(n) < 0.01 ? 8 : Math.abs(n) < 1 ? 6 : 4);
@@ -33,17 +33,21 @@ function num(v) {
   if (!s) return NaN;
   const lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
   if (lc > -1 && ld > -1) s = lc > ld ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, ''); // 1.234,5 или 1,234.5
-  else if (lc > -1) s = s.indexOf(',') !== lc ? s.replace(/,/g, '') : s.replace(',', '.');        // 1,234,567 или 0,01
+  else if (lc > -1) {
+    // на английски „70,000“ е хиляди; иначе една запетая е десетичен знак (0,01)
+    const thousands = s.indexOf(',') !== lc || (LANG === 'en' && /^-?[1-9]\d{0,2},\d{3}$/.test(s));
+    s = thousands ? s.replace(/,/g, '') : s.replace(',', '.');
+  }
   return Number(s);
 }
-// стойност за показване в поле: с десетична запетая и без излишни нули
-const fmtIn = n => n ? (+n).toFixed(8).replace(/\.?0+$/, '').replace('.', ',') : '';
+// стойност за показване в поле: с десетичния знак на езика и без излишни нули
+const fmtIn = n => n ? (+n).toFixed(8).replace(/\.?0+$/, '').replace('.', LANG === 'en' ? '.' : ',') : '';
 const fmtShort = (v, cur = 'USD') => {
   const a = Math.abs(v); let s;
-  if (a >= 1e12) s = nf(v / 1e12, 2) + ' трлн'; else if (a >= 1e9) s = nf(v / 1e9, 1) + ' млрд';
-  else if (a >= 1e6) s = nf(v / 1e6, 1) + ' млн'; else if (a >= 1e4) s = nf(v / 1e3, 0) + 'k';
+  if (a >= 1e12) s = nf(v / 1e12, 2) + tr('u.T'); else if (a >= 1e9) s = nf(v / 1e9, 1) + tr('u.B');
+  else if (a >= 1e6) s = nf(v / 1e6, 1) + tr('u.M'); else if (a >= 1e4) s = nf(v / 1e3, 0) + 'k';
   else if (a >= 1) s = nf(v, a >= 100 ? 0 : 2); else s = nf(v, 3);
-  return cur === 'EUR' ? s + ' €' : cur === 'USD' ? '$' + s : s;
+  return cur === 'EUR' ? (LANG === 'en' ? '€' + s : s + ' €') : cur === 'USD' ? '$' + s : s;
 };
 const cls = (el, n) => { el.classList.remove('up', 'down'); if (n != null && isFinite(n)) el.classList.add(n >= 0 ? 'up' : 'down'); };
 
@@ -52,7 +56,7 @@ const LS = {
   set(k, v) { try { localStorage.setItem('morebtc.' + k, JSON.stringify(v)); } catch { } },
   del(k) { try { localStorage.removeItem('morebtc.' + k); } catch { } },
 };
-const settings = Object.assign({ key: '', holdings: 848000, scale: 'log' }, LS.get('settings', {}));
+const settings = Object.assign({ key: '', holdings: 848000, scale: 'log', lang: LANG }, LS.get('settings', {}));
 const saveSettings = () => LS.set('settings', settings);
 
 function toast(msg, ms = 2600) {
@@ -67,6 +71,9 @@ function lowerBound(arr, x) { let lo = 0, hi = arr.length; while (lo < hi) { con
 // ============================================================ data
 const B = { d: [], p: [], d0: 0 };   // BTC USD, дневни, без пропуски
 const M = { d: [], p: [] };          // MSTR USD, търговски дни
+const A = { d: [], p: [] };          // ASST (Strive) USD, търговски дни — само за портфолиото
+const G = { d: [], p: [] };          // злато, USD за тройунция, търговски дни
+const OZ = 31.1034768;               // грама в една тройунция
 const FX = { d: [], p: [], d0: 0 };  // EUR→USD, без пропуски
 const FNG = new Map();               // ден → стойност
 const FNGs = { d: [], v: [] };
@@ -103,6 +110,8 @@ async function loadData() {
   contiguous([...bmap.entries()], B);
   M.d = mstr.d.map(x => x[0]); M.p = mstr.d.map(x => x[1]);
   contiguous(fx.d, FX);
+  try { const a = await getJSON('data/asst.json'); A.d = a.d.map(x => x[0]); A.p = a.d.map(x => x[1]); } catch { }
+  try { const g = await getJSON('data/gold.json'); G.d = g.d.map(x => x[0]); G.p = g.d.map(x => x[1]); } catch { }
   try {
     const f = await getJSON('https://api.alternative.me/fng/?limit=0');
     const arr = f.data.map(x => [Math.floor(+x.timestamp / 86400), +x.value]).sort((a, b) => a[0] - b[0]);
@@ -163,7 +172,7 @@ function fitRainbow() {
   const edges = Array.from({ length: 10 }, (_, k) => mn + (mx - mn) * k / 9);
   RB = { a, b, fit, mn, mx, edges };
 }
-const RB_NAMES = ['Огромна разпродажба', 'КУПУВАЙ!', 'Натрупвай', 'Все още евтино', 'HODL!', 'Балон ли е?', 'FOMO расте', 'Продавай. Сериозно.', 'Максимален балон'];
+const rbNames = () => tr('rb.names');
 const RB_COLORS = ['#6d28d9', '#2563eb', '#0891b2', '#16a34a', '#84cc16', '#eab308', '#f97316', '#ef4444', '#b91c1c'];
 const rbBand = (d, p) => { const r = Math.log10(p) - RB.fit(d); return clamp(Math.floor((r - RB.mn) / (RB.mx - RB.mn) * 9), 0, 8); };
 
@@ -197,12 +206,13 @@ function cycleScore(t) {
 }
 function phaseOf(t) {
   const { topT, botT } = CY;
-  if (t < 180) return ['Ранна фаза след халвинга', 'Исторически добро време за натрупване преди растежа.'];
-  if (t < topT - 75) return ['Бичи пазар', 'Растеж. Исторически върхът идва около ' + topT + ' дни след халвинга.'];
-  if (t < topT + 75) return ['Зона на исторически връх', 'Исторически тук е била най-високата цена. Внимание, време за частична печалба.'];
-  if (t < botT - 120) return ['Мечи пазар', 'Спад след върха. Исторически дъното идва около ' + botT + ' дни след халвинга.'];
-  if (t < botT + 120) return ['Зона на историческо дъно', 'Исторически най-доброто време за натрупване в цикъла.'];
-  return ['Натрупване преди халвинга', 'Възстановяване. Исторически добро време за натрупване.'];
+  const ph = (k, n) => [tr('ph.' + k), tr('ph.' + k + '.d', { n })];
+  if (t < 180) return ph('early');
+  if (t < topT - 75) return ph('bull', topT);
+  if (t < topT + 75) return ph('top');
+  if (t < botT - 120) return ph('bear', botT);
+  if (t < botT + 120) return ph('bot');
+  return ph('pre');
 }
 
 function computeIndicators() {
@@ -214,41 +224,39 @@ function computeIndicators() {
   I.rsiW = rsiWeekly(B.d, B.p, 14);
   fitRainbow();
   computeCycles();
-  I.score = B.p.map((_, i) => scoreAt(i).score);
+  I.score = B.p.map((_, i) => scoreAt(i, false).score);
 }
 const lerpLog = (m, a, b) => (Math.log(m) - Math.log(a)) / (Math.log(b) - Math.log(a)) * 100;
-function scoreAt(i) {
+// txt = false: само числото (за цялата история, по-бързо), без текстовете за екрана
+function scoreAt(i, txt = true) {
   const p = B.p[i], d = B.d[i], c = [];
   const r = Math.log10(p) - RB.fit(d);
-  c.push({ n: 'Rainbow', v: clamp((r - RB.mn) / (RB.mx - RB.mn) * 100), t: RB_NAMES[rbBand(d, p)] });
-  if (I.sma200[i]) { const m = p / I.sma200[i]; c.push({ n: 'Mayer Multiple', v: clamp(lerpLog(m, 0.6, 2.4)), t: nf(m, 2) }); }
-  if (I.wma200[i]) { const m = p / I.wma200[i]; c.push({ n: 'Цена / 200W MA', v: clamp(lerpLog(m, 1, 4.5)), t: '×' + nf(m, 2) }); }
-  if (I.rsiW[i] != null) c.push({ n: 'Седмичен RSI', v: clamp((I.rsiW[i] - 30) / 60 * 100), t: nf(I.rsiW[i], 0) });
+  c.push({ n: 'Rainbow', v: clamp((r - RB.mn) / (RB.mx - RB.mn) * 100), t: txt ? rbNames()[rbBand(d, p)] : '' });
+  if (I.sma200[i]) { const m = p / I.sma200[i]; c.push({ n: 'Mayer Multiple', v: clamp(lerpLog(m, 0.6, 2.4)), t: txt ? nf(m, 2) : '' }); }
+  if (I.wma200[i]) { const m = p / I.wma200[i]; c.push({ n: txt ? tr('c.w200') : '', v: clamp(lerpLog(m, 1, 4.5)), t: txt ? '×' + nf(m, 2) : '' }); }
+  if (I.rsiW[i] != null) c.push({ n: txt ? tr('c.rsiw') : '', v: clamp((I.rsiW[i] - 30) / 60 * 100), t: txt ? nf(I.rsiW[i], 0) : '' });
   const f = fngAt(d); if (f != null) c.push({ n: 'Fear & Greed', v: f, t: String(f) });
-  const h = halvingBefore(d); if (h != null) c.push({ n: 'Позиция в цикъла', v: clamp(cycleScore(d - h)), t: (d - h) + ' дни' });
-  if (I.pi[i]) c.push({ n: 'Pi Cycle Top', v: clamp((I.pi[i] - 0.35) / 0.65 * 100), t: nf(I.pi[i] * 100, 0) + '%' });
+  const h = halvingBefore(d); if (h != null) c.push({ n: txt ? tr('c.cycle') : '', v: clamp(cycleScore(d - h)), t: txt ? tr('nDays', { n: d - h }) : '' });
+  if (I.pi[i]) c.push({ n: 'Pi Cycle Top', v: clamp((I.pi[i] - 0.35) / 0.65 * 100), t: txt ? nf(I.pi[i] * 100, 0) + '%' : '' });
   return { score: c.reduce((s, x) => s + x.v, 0) / c.length, comps: c };
 }
 const scoreOnDay = d => I.score[clamp(d - B.d0, 0, I.score.length - 1)];
-function scoreLabel(s) {
-  if (s < 20) return 'Силна зона за натрупване';
-  if (s < 40) return 'Натрупвай';
-  if (s < 60) return 'Неутрално / HODL';
-  if (s < 80) return 'Внимание, частична печалба';
-  return 'Зона за продажба';
-}
+const scoreLabel = s => tr('sc.' + (s < 20 ? 0 : s < 40 ? 1 : s < 60 ? 2 : s < 80 ? 3 : 4));
 const scoreColor = s => `hsl(${Math.round(220 - clamp(s) * 2.2)}, 85%, 55%)`;
 
 // ============================================================ live prices
-const Live = { btcUsd: null, btcEur: null, openUsd: null, openEur: null, fx: null, mstr: null, mstrPc: null, mcap: null, shares: null, lastBtc: 0, lastMstr: 0, height: null };
+const Live = { btcUsd: null, btcEur: null, openUsd: null, openEur: null, fx: null, mstr: null, mstrPc: null, asst: null, asstPc: null, gold: null, goldOpen: null, mcap: null, shares: null, lastBtc: 0, lastMstr: 0, lastAsst: 0, lastGold: 0, height: null };
+// злато в USD за тройунция: наживо от Coinbase (PAXG, токен = 1 унция злато), иначе последното дневно затваряне
+const goldNow = () => Live.gold ?? G.p[G.p.length - 1] ?? null;
 let dirty = true, cbWs = null, fhWs = null;
 
 function connectCoinbase() {
   try { cbWs && cbWs.close(); } catch { }
   const ws = cbWs = new WebSocket('wss://ws-feed.exchange.coinbase.com');
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', product_ids: ['BTC-USD', 'BTC-EUR'], channels: ['ticker'] }));
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', product_ids: ['BTC-USD', 'BTC-EUR', 'PAXG-USD'], channels: ['ticker'] }));
   ws.onmessage = e => {
     const m = JSON.parse(e.data); if (m.type !== 'ticker') return;
+    if (m.product_id === 'PAXG-USD') { Live.gold = +m.price; Live.goldOpen = +m.open_24h; Live.lastGold = Date.now(); dirty = true; return; }
     if (m.product_id === 'BTC-USD') { Live.btcUsd = +m.price; Live.openUsd = +m.open_24h; } else { Live.btcEur = +m.price; Live.openEur = +m.open_24h; }
     if (Live.btcUsd && Live.btcEur) Live.fx = Live.btcUsd / Live.btcEur;
     Live.lastBtc = Date.now(); dirty = true;
@@ -257,6 +265,9 @@ function connectCoinbase() {
   ws.onerror = () => ws.close();
 }
 async function pollBtc() { // резервен вариант, ако WebSocket мълчи
+  if (Date.now() - Live.lastGold > 120000) { // златото се търгува рядко: проверка на всеки 2 мин. без сделка
+    try { const g = await getJSON('https://api.coinbase.com/v2/prices/PAXG-USD/spot'); Live.gold = +g.data.amount; Live.lastGold = Date.now(); dirty = true; } catch { }
+  }
   if (Date.now() - Live.lastBtc < 10000) return;
   try {
     const [u, e] = await Promise.all(['USD', 'EUR'].map(c => getJSON(`https://api.coinbase.com/v2/prices/BTC-${c}/spot`)));
@@ -270,27 +281,35 @@ function connectFinnhub() {
   fhWs = null;
   if (!settings.key) return;
   const ws = fhWs = new WebSocket('wss://ws.finnhub.io?token=' + encodeURIComponent(settings.key));
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', symbol: 'MSTR' }));
+  ws.onopen = () => { for (const symbol of ['MSTR', 'ASST']) ws.send(JSON.stringify({ type: 'subscribe', symbol })); };
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
-    if (m.type === 'trade' && m.data && m.data.length) { Live.mstr = m.data[m.data.length - 1].p; Live.lastMstr = Date.now(); dirty = true; }
+    if (m.type !== 'trade' || !m.data) return;
+    for (const x of m.data) { // сделките идват по ред; последната за всеки символ е текущата цена
+      if (x.s === 'MSTR') { Live.mstr = x.p; Live.lastMstr = Date.now(); dirty = true; }
+      else if (x.s === 'ASST') { Live.asst = x.p; Live.lastAsst = Date.now(); dirty = true; }
+    }
   };
   ws.onclose = () => { if (fhWs === ws) setTimeout(() => document.visibilityState === 'visible' && connectFinnhub(), 5000); };
   ws.onerror = () => ws.close();
 }
-async function pollMstr() {
+async function pollMstr() { // MSTR и ASST
   if (!settings.key) { // без ключ: последна дневна цена от файла
-    Live.mstr = M.p[M.p.length - 1]; Live.mstrPc = M.p[M.p.length - 2]; dirty = true; return;
+    Live.mstr = M.p[M.p.length - 1]; Live.mstrPc = M.p[M.p.length - 2];
+    if (A.p.length) { Live.asst = A.p[A.p.length - 1]; Live.asstPc = A.p[A.p.length - 2]; }
+    dirty = true; return;
   }
   try {
     const q = await getJSON(`https://finnhub.io/api/v1/quote?symbol=MSTR&token=${encodeURIComponent(settings.key)}`);
     if (q.c) { if (Date.now() - Live.lastMstr > 30000) Live.mstr = q.c; Live.mstrPc = q.pc; dirty = true; }
+    const qa = await getJSON(`https://finnhub.io/api/v1/quote?symbol=ASST&token=${encodeURIComponent(settings.key)}`);
+    if (qa.c) { if (Date.now() - Live.lastAsst > 30000) Live.asst = qa.c; Live.asstPc = qa.pc; dirty = true; }
     if (!Live.mcap) {
       const pr = await getJSON(`https://finnhub.io/api/v1/stock/profile2?symbol=MSTR&token=${encodeURIComponent(settings.key)}`);
       Live.shares = pr.shareOutstanding ? pr.shareOutstanding * 1e6 : null; Live.mcap = pr.marketCapitalization ? pr.marketCapitalization * 1e6 : null;
     }
-    $('#keyStatus').textContent = '✅ Ключът работи';
-  } catch { $('#keyStatus').textContent = '⚠️ Ключът не работи или е достигнат лимитът'; }
+    $('#keyStatus').textContent = tr('key.ok');
+  } catch { $('#keyStatus').textContent = tr('key.bad'); }
 }
 async function pollHeight() { try { Live.height = +(await (await fetch('https://mempool.space/api/blocks/tip/height')).text()); dirty = true; } catch { } }
 
@@ -312,7 +331,7 @@ function renderMarket() {
   prevBtc = usd;
   $('#btcEur').textContent = money(eur, 'EUR', 0);
   const open = Live.openUsd || B.p[i - 1], ch = (usd / open - 1) * 100;
-  const c = $('#btcChg'); c.textContent = pct(ch) + ' 24ч'; c.className = 'chip ' + (ch >= 0 ? 'up' : 'down');
+  const c = $('#btcChg'); c.textContent = pct(ch) + ' ' + tr('h24'); c.className = 'chip ' + (ch >= 0 ? 'up' : 'down');
   let ath = 0, athD = 0; for (let k = 0; k < B.p.length; k++) if (B.p[k] > ath) { ath = B.p[k]; athD = B.d[k]; }
   $('#athTxt').textContent = `${money(ath, 'USD', 0)} (${fmtDate(athD)})`;
   const dd = $('#ddTxt'); dd.textContent = pct((usd / ath - 1) * 100, 1); cls(dd, usd / ath - 1);
@@ -321,22 +340,30 @@ function renderMarket() {
   const mp = Live.mstr ?? M.p[M.p.length - 1], mpc = Live.mstrPc ?? M.p[M.p.length - 2];
   $('#mstrUsd').textContent = money(mp, 'USD', 2);
   $('#mstrEur').textContent = money(mp / (Live.fx || fxAt(t)), 'EUR', 2);
-  const mch = (mp / mpc - 1) * 100, mc = $('#mstrChg'); mc.textContent = pct(mch) + ' днес'; mc.className = 'chip ' + (mch >= 0 ? 'up' : 'down');
+  const mch = (mp / mpc - 1) * 100, mc = $('#mstrChg'); mc.textContent = pct(mch) + ' ' + tr('today'); mc.className = 'chip ' + (mch >= 0 ? 'up' : 'down');
   const nav = settings.holdings * usd;
   if (Live.shares) {
     const mcap = Live.shares * mp;
     $('#mnavTxt').textContent = nf(mcap / nav, 2);
-    $('#bpsTxt').textContent = nf(settings.holdings / Live.shares * 1e8, 0) + ' сат.';
+    $('#bpsTxt').textContent = tr('satsN', { n: nf(settings.holdings / Live.shares * 1e8, 0) });
   } else { $('#mnavTxt').textContent = '—'; $('#bpsTxt').textContent = '—'; }
-  $('#mstrNote').innerHTML = settings.key ? (Date.now() - Live.lastMstr < 120000 ? 'Наживо (Finnhub)' : 'Finnhub · извън търговските часове показва последната цена')
-    : 'Последна дневна цена. <a href="#" data-open-settings>Добави Finnhub ключ</a> за реално време и mNAV.';
+  $('#mstrNote').innerHTML = settings.key ? tr(Date.now() - Live.lastMstr < 120000 ? 'mstr.live' : 'mstr.closed') : tr('mstr.nokey');
+
+  // Злато
+  const g = goldNow();
+  if (g) {
+    const gPrev = Live.goldOpen || (G.d[G.d.length - 1] >= t ? G.p[G.p.length - 2] : G.p[G.p.length - 1]);
+    $('#goldUsd').textContent = money(g, 'USD', 0);
+    $('#goldEurG').textContent = tr('gold.perG', { p: money(g / OZ / (Live.fx || fxAt(t)), 'EUR', 2) });
+    const gch = (g / gPrev - 1) * 100, gc = $('#goldChg'); gc.textContent = pct(gch) + ' ' + tr('h24'); gc.className = 'chip ' + (gch >= 0 ? 'up' : 'down');
+    $('#goldBtc').textContent = tr('gold.btcIn', { n: nf(usd / g, 1) });
+  }
 
   // Сигнал
   const sc = scoreAt(i);
   $('#scoreNum').textContent = Math.round(sc.score);
   $('#scoreNum').style.color = scoreColor(sc.score);
   $('#scoreLabel').textContent = scoreLabel(sc.score);
-  $('#scoreSub').textContent = '0 = максимално изгодно за купуване · 100 = прегрят пазар';
   $('#scoreMarker').style.left = clamp(sc.score) + '%';
   $('#scoreComp').innerHTML = sc.comps.map(x => `<span>${x.n}</span><span class="muted mono">${x.t}</span><div class="bar"><i style="width:${Math.max(4, x.v)}%;background:${scoreColor(x.v)}"></i></div>`).join('');
 
@@ -345,36 +372,37 @@ function renderMarket() {
   $('#phaseTxt').textContent = ph;
   $('#cycleHint').textContent = phTxt;
   $('#daysSinceH').textContent = nf(tH);
-  $('#lastHTxt').textContent = 'Халвинг ' + fmtDate(cur.h);
+  $('#lastHTxt').textContent = tr('halvingOn', { d: fmtDate(cur.h) });
   const nextH = 1050000, left = Live.height ? nextH - Live.height : null;
   const estNext = left != null ? t + Math.round(left * 10 / 1440) : cur.h + CY.len;
   $('#nextHTxt').textContent = fmtMonY(estNext);
-  $('#blocksLeft').textContent = left != null ? `≈ ${nf(estNext - t)} дни · ${nf(left)} блока` : `≈ ${nf(estNext - t)} дни`;
+  $('#blocksLeft').textContent = left != null ? tr('daysBlocks', { d: nf(estNext - t), b: nf(left) }) : tr('daysApprox', { d: nf(estNext - t) });
   $('#cTop').textContent = money(cur.top, 'USD', 0);
-  $('#cTopS').textContent = `${fmtDate(cur.topD)} · ден ${cur.topD - cur.h}`;
+  $('#cTopS').textContent = `${fmtDate(cur.topD)} · ${tr('dayN', { n: cur.topD - cur.h })}`;
   $('#cBot').textContent = money(cur.bot, 'USD', 0);
-  $('#cBotS').textContent = `${pct((cur.bot / cur.top - 1) * 100, 0)} · ${fmtDate(cur.botD)} (досега)`;
+  $('#cBotS').textContent = `${pct((cur.bot / cur.top - 1) * 100, 0)} · ${fmtDate(cur.botD)} (${tr('soFar')})`;
   const len = estNext - cur.h, P = x => clamp(x / len * 100, 0, 100);
   $('#cycleBar').innerHTML = `<div class="fill" style="width:100%"></div>
-    <div class="tick" style="left:${P(CY.topT)}%">връх ~${CY.topT}д</div>
-    <div class="tick" style="left:${P(CY.botT)}%">дъно ~${CY.botT}д</div>
-    <div class="now" style="left:${P(tH)}%"><span>днес</span></div>`;
+    <div class="tick" style="left:${P(CY.topT)}%">${tr('tick.top', { n: CY.topT })}</div>
+    <div class="tick" style="left:${P(CY.botT)}%">${tr('tick.bot', { n: CY.botT })}</div>
+    <div class="now" style="left:${P(tH)}%"><span>${tr('today')}</span></div>`;
 
   // Индикатори
   const f = fngAt(t) ?? FNGs.v[FNGs.v.length - 1];
-  const fTxt = f == null ? '—' : f < 25 ? 'Силен страх' : f < 45 ? 'Страх' : f < 56 ? 'Неутрално' : f < 76 ? 'Алчност' : 'Силна алчност';
+  const fTxt = f == null ? '—' : tr('fg.' + (f < 25 ? 0 : f < 45 ? 1 : f < 56 ? 2 : f < 76 ? 3 : 4));
   const box = (k, v, s, col) => `<div class="stat"><div class="k">${k}</div><div class="v" ${col ? `style="color:${col}"` : ''}>${v}</div><div class="s">${s}</div></div>`;
   const rd = I.rsiD[i], rw = I.rsiW[i], may = usd / I.sma200[i], w2 = I.wma200[i], pi = I.pi[i];
-  const rsiS = r => r == null ? '' : r >= 70 ? 'Прекупен' : r <= 30 ? 'Препродаден' : 'Неутрален';
+  const rsiS = r => r == null ? '' : tr(r >= 70 ? 'rsi.ob' : r <= 30 ? 'rsi.os' : 'rsi.n');
+  const band = rbBand(t, usd);
   $('#indStats').innerHTML = [
     box('Fear & Greed', f ?? '—', fTxt, f != null ? scoreColor(f) : null),
-    box('RSI дневен', rd != null ? nf(rd, 0) : '—', rsiS(rd), rd != null ? scoreColor(clamp((rd - 30) / 40 * 100)) : null),
-    box('RSI седмичен', rw != null ? nf(rw, 0) : '—', rsiS(rw), rw != null ? scoreColor(clamp((rw - 30) / 60 * 100)) : null),
-    box('Mayer Multiple', nf(may, 2), may < 0.8 ? 'Под 0.8 = исторически евтино' : may > 2.4 ? 'Над 2.4 = прегрято' : 'Цена / 200-дн. средна', scoreColor(clamp(lerpLog(may, 0.6, 2.4)))),
-    box('200W MA', money(w2, 'USD', 0), `Цената е ${pct((usd / w2 - 1) * 100, 0)} над нея`),
-    box('200D MA', money(I.sma200[i], 'USD', 0), usd > I.sma200[i] ? 'Над нея = бичи режим' : 'Под нея = мечи режим'),
-    box('Pi Cycle Top', nf(pi * 100, 0) + '%', '100% = исторически сигнал за връх', scoreColor(clamp((pi - 0.35) / 0.65 * 100))),
-    box('Rainbow зона', RB_NAMES[rbBand(t, usd)], 'Лог. регресия', RB_COLORS[rbBand(t, usd)]),
+    box(tr('i.rsiD'), rd != null ? nf(rd, 0) : '—', rsiS(rd), rd != null ? scoreColor(clamp((rd - 30) / 40 * 100)) : null),
+    box(tr('i.rsiW'), rw != null ? nf(rw, 0) : '—', rsiS(rw), rw != null ? scoreColor(clamp((rw - 30) / 60 * 100)) : null),
+    box('Mayer Multiple', nf(may, 2), tr(may < 0.8 ? 'may.low' : may > 2.4 ? 'may.high' : 'may.mid'), scoreColor(clamp(lerpLog(may, 0.6, 2.4)))),
+    box('200W MA', money(w2, 'USD', 0), tr('w200.s', { p: pct((usd / w2 - 1) * 100, 0) })),
+    box('200D MA', money(I.sma200[i], 'USD', 0), tr(usd > I.sma200[i] ? 'd200.above' : 'd200.below')),
+    box('Pi Cycle Top', nf(pi * 100, 0) + '%', tr('pi.s'), scoreColor(clamp((pi - 0.35) / 0.65 * 100))),
+    box(tr('rb.zone'), rbNames()[band], tr('rb.s'), RB_COLORS[band]),
   ].join('');
 }
 
@@ -447,22 +475,17 @@ function chartPrice() {
   if (ov.sma200) ds.push({ label: '200D MA', data: xy(B.d, I.sma200, from), borderColor: '#a855f7', borderWidth: 1.2, pointRadius: 0 });
   const o = opts(); o.plugins.lines = { v: ov.halvings ? halvingLines() : [] };
   mk('cPrice', { type: 'line', data: { datasets: ds }, options: o });
-  $('#lgPrice').innerHTML = (ov.signal ? `<span><i style="background:linear-gradient(90deg,${scoreColor(0)},${scoreColor(50)},${scoreColor(100)})"></i>Цена, оцветена по сигнала (синьо = натрупване, червено = продажба)</span>` : '<span><i style="background:#f7931a"></i>Цена</span>')
-    + (ov.wma200 ? '<span><i style="background:#e5e7eb"></i>200-седмична средна (исторически „под“ е дъно)</span>' : '')
-    + (ov.sma200 ? '<span><i style="background:#a855f7"></i>200-дневна средна</span>' : '')
-    + (ov.halvings ? '<span><i style="background:rgba(247,147,26,.7)"></i>Пунктир = халвинг</span>' : '');
+  $('#lgPrice').innerHTML = (ov.signal ? `<span><i style="background:linear-gradient(90deg,${scoreColor(0)},${scoreColor(50)},${scoreColor(100)})"></i>${tr('lg.signal')}</span>` : `<span><i style="background:#f7931a"></i>${tr('lg.price')}</span>`)
+    + (ov.wma200 ? `<span><i style="background:#e5e7eb"></i>${tr('lg.w200')}</span>` : '')
+    + (ov.sma200 ? `<span><i style="background:#a855f7"></i>${tr('lg.d200')}</span>` : '')
+    + (ov.halvings ? `<span><i style="background:rgba(247,147,26,.7)"></i>${tr('lg.halving')}</span>` : '');
 }
 
-const CYCLE_HINTS = {
-  halving: 'Всеки цикъл започва от деня на халвинга (= 1×). Вижда се колко пъти е нараснала цената и кога е бил върхът.',
-  bottom: 'Всеки цикъл започва от дъното на предишния мечи пазар (= 1×). Показва растежа от дъно до дъно.',
-  top: 'Всеки цикъл започва от върха (= 1×). Показва колко дълбоко и колко дълго пада цената след връх.',
-};
 function chartCycles() {
   const mode = $('#cycleMode button.on').dataset.m;
-  $('#cycleModeHint').textContent = CYCLE_HINTS[mode];
+  $('#cycleModeHint').textContent = tr(`cm.${mode}.h`);
   const ds = [], lg = [];
-  const names = { 2012: '2012–2016', 2016: '2016–2020', 2020: '2020–2024', 2024: '2024– (сега)' };
+  const names = { 2012: '2012–2016', 2016: '2016–2020', 2020: '2020–2024', 2024: `2024–${tr('nowParen')}` };
   for (const c of [...CY.cycles].reverse()) {
     const anchor = mode === 'halving' ? c.h : mode === 'bottom' ? c.pb : c.topD;
     const next = CY.cycles[c.k + 1];
@@ -475,13 +498,13 @@ function chartCycles() {
     lg.push(`<span><i style="background:${col}"></i>${names[c.year]}</span>`);
   }
   const o = opts({ yFmt: v => nf(v, v < 10 ? 2 : 0) + '×', labelFmt: (v) => `${nf(v, 2)}× (${pct((v - 1) * 100, 0)})` });
-  o.scales.x.ticks.callback = v => v + 'д';
-  o.scales.x.title = { display: true, text: mode === 'halving' ? 'дни след халвинга' : mode === 'bottom' ? 'дни след дъното' : 'дни след върха' };
-  o.plugins.tooltip.callbacks.title = it => it.length ? `Ден ${it[0].parsed.x}` : '';
+  o.scales.x.ticks.callback = v => v + tr('dShort');
+  o.scales.x.title = { display: true, text: tr('ax.' + mode) };
+  o.plugins.tooltip.callbacks.title = it => it.length ? tr('dayCap', { n: it[0].parsed.x }) : '';
   o.interaction = { mode: 'index', intersect: false, axis: 'x' };
   o.plugins.decimation.enabled = false;
   const cur = CY.cur, tNow = mode === 'halving' ? today() - cur.h : mode === 'bottom' ? today() - cur.pb : today() - cur.topD;
-  o.plugins.lines = { v: [{ x: tNow, t: 'днес', c: '#22c55e' }] };
+  o.plugins.lines = { v: [{ x: tNow, t: tr('today'), c: '#22c55e' }] };
   mk('cCycles', { type: 'line', data: { datasets: ds }, options: o });
   $('#lgCycles').innerHTML = lg.reverse().join('');
 }
@@ -491,16 +514,16 @@ function chartRainbow() {
   for (let k = 0; k <= 9; k++) {
     const data = [];
     for (let d = from; d <= to; d += 7) data.push({ x: d, y: 10 ** (RB.fit(d) + RB.edges[k]) });
-    ds.push({ label: k ? RB_NAMES[k - 1] : 'дъно', data, borderWidth: 0, pointRadius: 0, fill: k ? '-1' : false, backgroundColor: k ? RB_COLORS[k - 1] + 'b0' : 'transparent' });
+    ds.push({ label: k ? rbNames()[k - 1] : tr('rb.floor'), data, borderWidth: 0, pointRadius: 0, fill: k ? '-1' : false, backgroundColor: k ? RB_COLORS[k - 1] + 'b0' : 'transparent' });
   }
   ds.push({ label: 'BTC', data: xy(B.d, B.p, from), borderColor: '#fff', borderWidth: 1.5, pointRadius: 0 });
   const o = opts();
   o.plugins.tooltip.filter = c => c.dataset.label === 'BTC';
-  o.plugins.lines = { v: [{ x: today(), t: 'днес', c: '#fff' }] };
+  o.plugins.lines = { v: [{ x: today(), t: tr('today'), c: '#fff' }] };
   mk('cRainbow', { type: 'line', data: { datasets: ds }, options: o });
   const b = rbBand(today(), B.p[B.p.length - 1]);
-  $('#rbNow').textContent = RB_NAMES[b]; $('#rbNow').style.color = RB_COLORS[b];
-  $('#lgRainbow').innerHTML = RB_NAMES.map((n, k) => `<span><i class="sq" style="background:${RB_COLORS[k]}"></i>${n}</span>`).reverse().join('');
+  $('#rbNow').textContent = rbNames()[b]; $('#rbNow').style.color = RB_COLORS[b];
+  $('#lgRainbow').innerHTML = rbNames().map((n, k) => `<span><i class="sq" style="background:${RB_COLORS[k]}"></i>${n}</span>`).reverse().join('');
 }
 
 function chartMstr() {
@@ -514,28 +537,52 @@ function chartMstr() {
       { label: 'BTC', data: dd.map((d, k) => ({ x: d, y: bp[k] / bp[0] * 100 })), borderColor: '#f7931a', borderWidth: 1.6, pointRadius: 0 },
     ];
     const r1 = (mp[mp.length - 1] / mp[0] - 1) * 100, r2 = (bp[bp.length - 1] / bp[0] - 1) * 100;
-    hint = `От ${fmtDate(dd[0])}: MSTR ${pct(r1, 0)}, BTC ${pct(r2, 0)}. И двете започват от 100.`;
+    hint = tr('mh.norm', { d: fmtDate(dd[0]), a: pct(r1, 0), b: pct(r2, 0) });
     o = opts({ legend: true, yFmt: v => nf(v, 0), labelFmt: v => nf(v, 1) });
   } else if (mode === 'mstrbtc') {
-    ds = [{ label: 'MSTR в сатоши', data: dd.map((d, k) => ({ x: d, y: mp[k] / bp[k] * 1e8 })), borderColor: '#ef4444', borderWidth: 1.6, pointRadius: 0, fill: true, backgroundColor: 'rgba(239,68,68,.08)' }];
-    hint = 'Цена на 1 MSTR акция в сатоши. Расте ли, MSTR бие BTC. Пада ли, BTC е по-добрата инвестиция.';
+    ds = [{ label: tr('ml.mstrsats'), data: dd.map((d, k) => ({ x: d, y: mp[k] / bp[k] * 1e8 })), borderColor: '#ef4444', borderWidth: 1.6, pointRadius: 0, fill: true, backgroundColor: 'rgba(239,68,68,.08)' }];
+    hint = tr('mh.mstrbtc');
     o = opts({ yFmt: v => fmtShort(v, '') + ' sat' });
   } else {
-    ds = [{ label: 'MSTR акции за 1 BTC', data: dd.map((d, k) => ({ x: d, y: bp[k] / mp[k] })), borderColor: '#f7931a', borderWidth: 1.6, pointRadius: 0, fill: true, backgroundColor: 'rgba(247,147,26,.08)' }];
-    hint = 'Колко MSTR акции купува 1 BTC. Високо значи MSTR е евтина спрямо BTC и е време да сменяш BTC→MSTR. Ниско значи обратното.';
+    ds = [{ label: tr('ml.btcmstr'), data: dd.map((d, k) => ({ x: d, y: bp[k] / mp[k] })), borderColor: '#f7931a', borderWidth: 1.6, pointRadius: 0, fill: true, backgroundColor: 'rgba(247,147,26,.08)' }];
+    hint = tr('mh.btcmstr');
     o = opts({ yFmt: v => nf(v, v < 10 ? 2 : 0) });
   }
   $('#mstrHint').textContent = hint;
   mk('cMstr', { type: 'line', data: { datasets: ds }, options: o });
 }
 
+function chartGold() {
+  const mode = $('#goldMode button.on').dataset.m, from = rangeFrom(getRange('gold'));
+  const dd = G.d.slice(), gp = G.p.slice();
+  if (Live.gold && dd.length && dd[dd.length - 1] < today()) { dd.push(today()); gp.push(Live.gold); } // днешната цена наживо
+  else if (Live.gold && dd.length) gp[gp.length - 1] = Live.gold;
+  const start = Math.max(from === -Infinity ? 0 : from, mode === 'btc' ? B.d0 : 0);
+  const i0 = lowerBound(dd, start), xs = dd.slice(i0), ys = gp.slice(i0);
+  let data, label, yFmt, labelFmt;
+  if (mode === 'eurg') {
+    data = xs.map((d, k) => ({ x: d, y: ys[k] / OZ / fxAt(d) })); label = tr('gl.eurg');
+    yFmt = v => fmtShort(v, 'EUR'); labelFmt = v => money(v, 'EUR', 2);
+  } else if (mode === 'btc') {
+    data = xs.map((d, k) => ({ x: d, y: btcAt(d) / ys[k] })); label = tr('gl.btcoz');
+    yFmt = v => nf(v, v < 10 ? 2 : 0); labelFmt = v => tr('ozN', { n: nf(v, 2) });
+  } else {
+    data = xs.map((d, k) => ({ x: d, y: ys[k] })); label = tr('gl.usdoz');
+    yFmt = v => fmtShort(v, 'USD'); labelFmt = v => money(v, 'USD', 0);
+  }
+  $('#goldHint').textContent = tr('gold.h.' + mode);
+  const o = opts({ yFmt, labelFmt });
+  if (mode === 'btc') o.plugins.lines = { v: halvingLines() };
+  mk('cGold', { type: 'line', data: { datasets: [{ label, data, borderColor: '#d4af37', borderWidth: 1.6, pointRadius: 0, fill: true, backgroundColor: 'rgba(212,175,55,.08)' }] }, options: o });
+}
+
 function chartRsi() {
   const from = rangeFrom(getRange('rsi'));
   const o = opts({ y: { type: 'linear', min: 0, max: 100 }, yFmt: v => nf(v, 0), legend: true });
-  o.plugins.lines = { h: [{ y: 70, t: '70 прекупен', c: '#ef4444' }, { y: 30, t: '30 препродаден', c: '#3b82f6' }] };
+  o.plugins.lines = { h: [{ y: 70, t: tr('rsi.70'), c: '#ef4444' }, { y: 30, t: tr('rsi.30'), c: '#3b82f6' }] };
   mk('cRsi', { type: 'line', data: { datasets: [
-    { label: 'Дневен RSI', data: xy(B.d, I.rsiD, from), borderColor: 'rgba(247,147,26,.55)', borderWidth: 1, pointRadius: 0 },
-    { label: 'Седмичен RSI', data: xy(B.d, I.rsiW, from), borderColor: '#a855f7', borderWidth: 2, pointRadius: 0 },
+    { label: tr('rsi.daily'), data: xy(B.d, I.rsiD, from), borderColor: 'rgba(247,147,26,.55)', borderWidth: 1, pointRadius: 0 },
+    { label: tr('c.rsiw'), data: xy(B.d, I.rsiW, from), borderColor: '#a855f7', borderWidth: 2, pointRadius: 0 },
   ] }, options: o });
 }
 function chartFng() {
@@ -553,10 +600,10 @@ function chartScore() {
   const o = opts(); o.plugins.lines = { v: halvingLines() };
   mk('cScoreP', { type: 'line', data: { datasets: [{ label: 'BTC', data: xy(B.d, B.p, from), borderWidth: 2, pointRadius: 0, segment: { borderColor: c => scoreColor(scoreOnDay(c.p0.parsed.x)) } }] }, options: o });
   const o2 = opts({ y: { type: 'linear', min: 0, max: 100 }, yFmt: v => nf(v, 0) });
-  o2.plugins.lines = { h: [{ y: 80, t: 'продажба', c: '#ef4444' }, { y: 20, t: 'натрупване', c: '#3b82f6' }] };
-  mk('cScore', { type: 'line', data: { datasets: [{ label: 'Сигнал', data: xy(B.d, I.score, from, 3), borderWidth: 1.5, pointRadius: 0, segment: { borderColor: c => scoreColor(c.p1.parsed.y) } }] }, options: o2 });
+  o2.plugins.lines = { h: [{ y: 80, t: tr('l.sell'), c: '#ef4444' }, { y: 20, t: tr('l.acc'), c: '#3b82f6' }] };
+  mk('cScore', { type: 'line', data: { datasets: [{ label: tr('signal'), data: xy(B.d, I.score, from, 3), borderWidth: 1.5, pointRadius: 0, segment: { borderColor: c => scoreColor(c.p1.parsed.y) } }] }, options: o2 });
 }
-function renderCharts() { chartPrice(); chartCycles(); chartRainbow(); chartMstr(); chartRsi(); chartFng(); chartScore(); }
+function renderCharts() { chartPrice(); chartCycles(); chartRainbow(); chartMstr(); chartGold(); chartRsi(); chartFng(); chartScore(); }
 
 // ============================================================ DCA engine
 function lastDayOf(asset) { return asset === 'MSTR' ? M.d[M.d.length - 1] : B.d[B.d.length - 1]; }
@@ -605,8 +652,10 @@ function dcaWeekly(asset, wd, from, to) { // wd: 0=пон..6=нед
 }
 
 // ============================================================ calculators
-function fillDays(sel, def = 20) {
-  sel.innerHTML = Array.from({ length: 28 }, (_, k) => `<option value="${k + 1}" ${k + 1 === def ? 'selected' : ''}>${k + 1}-во число</option>`).join('') + '<option value="last">Последен ден</option>';
+function fillDays(sel) { // пази избрания ден при смяна на езика
+  const v = sel.value || '20';
+  sel.innerHTML = Array.from({ length: 28 }, (_, k) => `<option value="${k + 1}">${tr('dom.opt', { d: ordDay(k + 1) })}</option>`).join('') + `<option value="last">${tr('lastDay')}</option>`;
+  sel.value = v;
 }
 const statBox = (k, v, s = '', c = '') => `<div class="stat"><div class="k">${k}</div><div class="v ${c}">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`;
 
@@ -617,17 +666,17 @@ function calcDca() {
     : filter === 'fear' ? d => { const f = fngAt(d); return f != null && f <= thr ? 1 : 0; }
     : filter === 'score' ? d => scoreOnDay(d) <= thr ? 1 : 0 : () => 1;
   const r = dca({ asset, cur, amount: num($('#dAmt').value) || 0, dom: $('#dDom').value, from: isoToDay($('#dFrom').value), to: isoToDay($('#dTo').value), mult });
-  const unit = asset === 'BTC' ? 'BTC' : 'акции';
+  const unit = asset === 'BTC' ? 'BTC' : tr('unit.shares');
   const sats = asset === 'BTC' && r.inv ? nf(r.units * 1e8 / r.inv, 0) : null;
   $('#dRes').innerHTML = [
-    statBox('Общо вложено', money(r.inv, cur), `${r.buys.length} покупки`),
-    statBox('Натрупано', asset === 'BTC' ? fmtBtc(r.units) + ' BTC' : nf(r.units, 3) + ' ' + unit, sats ? sats + ' сат. за 1 ' + (cur === 'EUR' ? '€' : '$') : ''),
-    statBox('Средна цена', money(r.avg, cur), `Цена в края: ${money(r.endP, cur)}`),
-    statBox('Стойност сега', money(r.value, cur), fmtDate(r.endDay)),
-    statBox('Печалба / загуба', money(r.pnl, cur), '', r.pnl >= 0 ? 'up' : 'down'),
-    statBox('Доходност', pct(r.pnlPct), '', r.pnl >= 0 ? 'up' : 'down'),
+    statBox(tr('st.invested'), money(r.inv, cur), tr('nBuys', { n: r.buys.length })),
+    statBox(tr('st.accum'), asset === 'BTC' ? fmtBtc(r.units) + ' BTC' : nf(r.units, 3) + ' ' + unit, sats ? tr('satsPer', { n: sats, c: cur === 'EUR' ? '€' : '$' }) : ''),
+    statBox(tr('st.avg'), money(r.avg, cur), tr('priceAtEnd', { p: money(r.endP, cur) })),
+    statBox(tr('st.valueNow'), money(r.value, cur), fmtDate(r.endDay)),
+    statBox(tr('st.pnl'), money(r.pnl, cur), '', r.pnl >= 0 ? 'up' : 'down'),
+    statBox(tr('st.ret'), pct(r.pnlPct), '', r.pnl >= 0 ? 'up' : 'down'),
   ].join('');
-  if (!r.buys.length) { mk('cDca', { type: 'line', data: { datasets: [] }, options: opts() }); mk('cDcaAvg', { type: 'line', data: { datasets: [] }, options: opts() }); $('#dTable').innerHTML = '<p class="muted">Няма покупки в този период.</p>'; return; }
+  if (!r.buys.length) { mk('cDca', { type: 'line', data: { datasets: [] }, options: opts() }); mk('cDcaAvg', { type: 'line', data: { datasets: [] }, options: opts() }); $('#dTable').innerHTML = `<p class="muted">${tr('noBuys')}</p>`; return; }
   // времева линия: вложено vs стойност
   const inv = [], val = [], pr = [], av = []; let j = 0, ci = 0, cu = 0;
   const step = r.endDay - r.buys[0].day > 1500 ? 4 : 2;
@@ -638,38 +687,42 @@ function calcDca() {
   }
   const o = opts({ legend: true, y: { type: 'linear' }, yFmt: v => fmtShort(v, cur), labelFmt: v => money(v, cur) });
   mk('cDca', { type: 'line', data: { datasets: [
-    { label: 'Стойност', data: val, borderColor: '#f7931a', backgroundColor: 'rgba(247,147,26,.12)', fill: true, borderWidth: 2, pointRadius: 0 },
-    { label: 'Вложено', data: inv, borderColor: '#9ca3af', borderWidth: 1.5, pointRadius: 0, stepped: true },
+    { label: tr('l.value'), data: val, borderColor: '#f7931a', backgroundColor: 'rgba(247,147,26,.12)', fill: true, borderWidth: 2, pointRadius: 0 },
+    { label: tr('l.invested'), data: inv, borderColor: '#9ca3af', borderWidth: 1.5, pointRadius: 0, stepped: true },
   ] }, options: o });
   const o2 = opts({ legend: true, yFmt: v => fmtShort(v, cur), labelFmt: v => money(v, cur) });
   mk('cDcaAvg', { type: 'line', data: { datasets: [
-    { label: 'Цена', data: pr, borderColor: 'rgba(255,255,255,.6)', borderWidth: 1.2, pointRadius: 0 },
-    { label: 'Твоята средна цена', data: av, borderColor: '#22c55e', borderWidth: 2, pointRadius: 0 },
+    { label: tr('l.price'), data: pr, borderColor: 'rgba(255,255,255,.6)', borderWidth: 1.2, pointRadius: 0 },
+    { label: tr('l.yourAvg'), data: av, borderColor: '#22c55e', borderWidth: 2, pointRadius: 0 },
   ] }, options: o2 });
-  $('#dTable').innerHTML = `<table><tr><th>Дата</th><th>Цена</th><th>Сума</th><th>${unit}</th></tr>${r.buys.map(b => `<tr><td>${fmtDate(b.day)}</td><td>${money(b.price, cur)}</td><td>${money(b.amt, cur)}</td><td>${asset === 'BTC' ? fmtBtc(b.units) : nf(b.units, 4)}</td></tr>`).join('')}</table>`;
+  $('#dTable').innerHTML = `<table><tr><th>${tr('th.date')}</th><th>${tr('l.price')}</th><th>${tr('th.amount')}</th><th>${unit}</th></tr>${r.buys.map(b => `<tr><td>${fmtDate(b.day)}</td><td>${money(b.price, cur)}</td><td>${money(b.amt, cur)}</td><td>${asset === 'BTC' ? fmtBtc(b.units) : nf(b.units, 4)}</td></tr>`).join('')}</table>`;
 }
 
 function calcBestDay() {
   const asset = $('#bAsset').value, from = isoToDay($('#bFrom').value), to = isoToDay($('#bTo').value), f = $('#bFilter').value;
   const mult = f === 'all' ? () => 1 : d => regime(d, f) ? 1 : 0;
   const res = Array.from({ length: 28 }, (_, k) => dca({ asset, cur: 'USD', dom: k + 1, from, to, mult }).avg).map((v, k) => ({ dom: k + 1, avg: v })).filter(x => x.avg > 0);
-  if (!res.length) { $('#bBest').textContent = 'Няма данни за този период.'; return; }
+  if (!res.length) { $('#bBest').textContent = tr('noData'); return; }
   const mean = res.reduce((s, x) => s + x.avg, 0) / res.length;
   const sorted = [...res].sort((a, b) => a.avg - b.avg), best = sorted.slice(0, 3).map(x => x.dom), worst = sorted.slice(-3).map(x => x.dom);
   const b0 = sorted[0], w0 = sorted[sorted.length - 1];
-  $('#bBest').innerHTML = `🏆 Най-изгоден ден: <b>${b0.dom}-о число</b> (средна цена ${money(b0.avg)}, ${pct((b0.avg / mean - 1) * 100)} спрямо средното). Най-неизгоден: <b>${w0.dom}-о</b> (${pct((w0.avg / mean - 1) * 100)}). Разликата между най-добрия и най-лошия ден е ${nf((w0.avg / b0.avg - 1) * 100, 1)}%. Малки разлики (под ~2%) обикновено са случайни. Сравни няколко периода, преди да решиш.`;
-  const o = opts({ y: { type: 'linear' }, yFmt: v => pct(v, 1), labelFmt: (v, c) => `${pct(v, 2)} (средна ${money(res[c.dataIndex].avg)})` });
+  $('#bBest').innerHTML = tr('bd.result', {
+    best: tr('dom.opt', { d: ordDay(b0.dom) }), avg: money(b0.avg), pb: pct((b0.avg / mean - 1) * 100),
+    worst: tr('dom.opt', { d: ordDay(w0.dom) }), pw: pct((w0.avg / mean - 1) * 100), diff: nf((w0.avg / b0.avg - 1) * 100, 1),
+  });
+  const o = opts({ y: { type: 'linear' }, yFmt: v => pct(v, 1), labelFmt: (v, c) => `${pct(v, 2)} (${tr('avgShort', { p: money(res[c.dataIndex].avg) })})` });
   o.scales.x = { type: 'category', grid: { display: false } };
-  o.plugins.tooltip.callbacks.title = it => it.length ? it[0].label + '-о число' : '';
+  o.plugins.tooltip.callbacks.title = it => it.length ? tr('dom.opt', { d: ordDay(it[0].label) }) : '';
   o.plugins.decimation.enabled = false; o.parsing = true;
-  mk('cBestDay', { type: 'bar', data: { labels: res.map(x => x.dom), datasets: [{ label: 'Спрямо средното', data: res.map(x => (x.avg / mean - 1) * 100),
+  mk('cBestDay', { type: 'bar', data: { labels: res.map(x => x.dom), datasets: [{ label: tr('vsMean'), data: res.map(x => (x.avg / mean - 1) * 100),
     backgroundColor: res.map(x => best.includes(x.dom) ? '#22c55e' : worst.includes(x.dom) ? '#ef4444' : '#4b5563'), borderRadius: 4 }] }, options: o });
+  const WEEKDAYS = tr('weekdays');
   const wd = WEEKDAYS.map((_, k) => dcaWeekly(asset, k, from, to)).map(v => v ?? NaN);
   const wmean = wd.filter(isFinite).reduce((s, v, _, a) => s + v / a.length, 0), wmin = Math.min(...wd.filter(isFinite));
   const o2 = opts({ y: { type: 'linear' }, yFmt: v => pct(v, 1), labelFmt: v => pct(v, 2) });
   o2.scales.x = { type: 'category', grid: { display: false } }; o2.plugins.decimation.enabled = false; o2.parsing = true;
   o2.plugins.tooltip.callbacks.title = it => it.length ? it[0].label : '';
-  mk('cBestWd', { type: 'bar', data: { labels: WEEKDAYS, datasets: [{ label: 'Спрямо средното', data: wd.map(v => (v / wmean - 1) * 100), backgroundColor: wd.map(v => v === wmin ? '#22c55e' : '#4b5563'), borderRadius: 4 }] }, options: o2 });
+  mk('cBestWd', { type: 'bar', data: { labels: WEEKDAYS, datasets: [{ label: tr('vsMean'), data: wd.map(v => (v / wmean - 1) * 100), backgroundColor: wd.map(v => v === wmin ? '#22c55e' : '#4b5563'), borderRadius: 4 }] }, options: o2 });
 }
 
 function monthCloses(asset) { // [{y, m, close}] последна цена за месеца
@@ -698,24 +751,25 @@ function calcMonths() {
     if (prev) yearly.set(mc[k].y, (mc[k].close / prev.close - 1) * 100);
   }
   const years = [...rows.keys()].filter(y => y >= startY).sort((a, b) => b - a);
-  let h = `<table class="heat"><tr><th>Година</th>${MONTHS.map(m => `<th>${m}</th>`).join('')}<th>Година</th></tr>`;
+  const MONTHS = tr('months');
+  let h = `<table class="heat"><tr><th>${tr('th.year')}</th>${MONTHS.map(m => `<th>${m}</th>`).join('')}<th>${tr('th.year')}</th></tr>`;
   for (const y of years) {
     h += `<tr><td>${y}</td>${rows.get(y).map(v => `<td style="background:${heatBg(v)}">${v == null ? '' : nf(v, 0) + '%'}</td>`).join('')}<td style="background:${heatBg(yearly.get(y) != null ? yearly.get(y) / 4 : null)};font-weight:700">${yearly.has(y) ? nf(yearly.get(y), 0) + '%' : ''}</td></tr>`;
   }
   const col = m => years.map(y => rows.get(y)[m]).filter(v => v != null);
   const avg = a => a.reduce((s, v) => s + v, 0) / a.length, med = a => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
-  h += `<tr><td><b>Средно</b></td>${MONTHS.map((_, m) => { const a = col(m); const v = a.length ? avg(a) : null; return `<td style="background:${heatBg(v)}"><b>${v == null ? '' : nf(v, 1) + '%'}</b></td>`; }).join('')}<td></td></tr>`;
-  h += `<tr><td><b>Медиана</b></td>${MONTHS.map((_, m) => { const v = med(col(m)); return `<td style="background:${heatBg(v)}">${v == null ? '' : nf(v, 1) + '%'}</td>`; }).join('')}<td></td></tr>`;
-  h += `<tr><td><b>% плюсови</b></td>${MONTHS.map((_, m) => { const a = col(m); const v = a.length ? a.filter(x => x > 0).length / a.length * 100 : null; return `<td style="background:${v == null ? '' : heatBg((v - 50) / 2)}">${v == null ? '' : nf(v, 0) + '%'}</td>`; }).join('')}<td></td></tr></table>`;
+  h += `<tr><td><b>${tr('mo.avg')}</b></td>${MONTHS.map((_, m) => { const a = col(m); const v = a.length ? avg(a) : null; return `<td style="background:${heatBg(v)}"><b>${v == null ? '' : nf(v, 1) + '%'}</b></td>`; }).join('')}<td></td></tr>`;
+  h += `<tr><td><b>${tr('mo.med')}</b></td>${MONTHS.map((_, m) => { const v = med(col(m)); return `<td style="background:${heatBg(v)}">${v == null ? '' : nf(v, 1) + '%'}</td>`; }).join('')}<td></td></tr>`;
+  h += `<tr><td><b>${tr('mo.pos')}</b></td>${MONTHS.map((_, m) => { const a = col(m); const v = a.length ? a.filter(x => x > 0).length / a.length * 100 : null; return `<td style="background:${v == null ? '' : heatBg((v - 50) / 2)}">${v == null ? '' : nf(v, 0) + '%'}</td>`; }).join('')}<td></td></tr></table>`;
   $('#mHeat').innerHTML = h;
   // по година в цикъла
   const hy = HALVINGS.map(x => dDate(x).getUTCFullYear());
-  const types = ['Година на халвинга', '1 г. след халвинга', '2 г. след (обикн. мечи пазар)', '3 г. след (преди халвинга)'];
-  let t = `<table><tr><th>Фаза</th>${hy.map(y => `<th>Цикъл ${y}</th>`).join('')}<th>Средно</th></tr>`;
+  const types = tr('cy.types');
+  let t = `<table><tr><th>${tr('th.phase')}</th>${hy.map(y => `<th>${tr('th.cycleY', { y })}</th>`).join('')}<th>${tr('mo.avg')}</th></tr>`;
   types.forEach((name, k) => {
     const vals = hy.map(y => yearly.get(y + k));
-    const v2 = vals.filter(v => v != null && !(hy[hy.length - 1] + k === new Date().getUTCFullYear() && false));
-    t += `<tr><td>${name}</td>${vals.map((v, j) => `<td class="${v == null ? '' : v >= 0 ? 'up' : 'down'}">${v == null ? '—' : pct(v, 0)}${hy[j] + k === new Date().getUTCFullYear() ? ' <span class="muted">(досега)</span>' : ''}</td>`).join('')}<td><b>${v2.length ? pct(avg(v2), 0) : '—'}</b></td></tr>`;
+    const v2 = vals.filter(v => v != null);
+    t += `<tr><td>${name}</td>${vals.map((v, j) => `<td class="${v == null ? '' : v >= 0 ? 'up' : 'down'}">${v == null ? '—' : pct(v, 0)}${hy[j] + k === new Date().getUTCFullYear() ? ` <span class="muted">(${tr('soFar')})</span>` : ''}</td>`).join('')}<td><b>${v2.length ? pct(avg(v2), 0) : '—'}</b></td></tr>`;
   });
   $('#mCycleYears').innerHTML = t + '</table>';
 }
@@ -725,42 +779,43 @@ function calcStrat() {
   const fngMult = d => { const f = fngAt(d); if (f == null) return 1; return f < 25 ? 2 : f < 45 ? 1.5 : f < 55 ? 1 : f < 75 ? 0.5 : 0.25; };
   const scMult = d => { const s = scoreOnDay(d); return s < 20 ? 3 : s < 40 ? 2 : s < 60 ? 1 : s < 80 ? 0.5 : 0; };
   const strats = [
-    ['Обикновен DCA', () => 1], ['Fear & Greed', fngMult], ['По сигнала', scMult], ['Само мечи пазар ×2', d => regime(d, 'bear') ? 2 : 0],
+    [tr('s.plain'), () => 1], ['Fear & Greed', fngMult], [tr('s.sig'), scMult], [tr('s.bear'), d => regime(d, 'bear') ? 2 : 0],
   ].map(([n, f]) => ({ n, r: dca({ asset: 'BTC', cur, amount, dom, from, to, mult: f }) }));
   // идеал: всичко на дъното
   const base = strats[0].r; let minP = Infinity, minD = from;
   for (let d = from; d <= Math.min(to, today()); d++) { const p = btcAt(d) / (cur === 'EUR' ? fxAt(d) : 1); if (p < minP) { minP = p; minD = d; } }
   const ideal = { inv: base.inv, units: base.inv / minP, avg: minP }; ideal.value = ideal.units * base.endP; ideal.pnlPct = (ideal.value / ideal.inv - 1) * 100;
-  strats.push({ n: `Купи дъното (${fmtDate(minD)})`, r: ideal, ideal: true });
+  strats.push({ n: tr('s.ideal', { d: fmtDate(minD) }), r: ideal, ideal: true });
   const sym = cur === 'EUR' ? '€' : '$';
   const bestSats = Math.max(...strats.filter(s => !s.ideal && s.r.inv).map(s => s.r.units / s.r.inv));
-  $('#sTable').innerHTML = `<table><tr><th>Стратегия</th><th>Вложено</th><th>BTC</th><th>Средна цена</th><th>Сат. за 1 ${sym}</th><th>Стойност</th><th>Доходност</th></tr>${strats.map(s => {
+  $('#sTable').innerHTML = `<table><tr><th>${tr('th.strategy')}</th><th>${tr('l.invested')}</th><th>BTC</th><th>${tr('st.avg')}</th><th>${tr('th.satsPer', { c: sym })}</th><th>${tr('l.value')}</th><th>${tr('st.ret')}</th></tr>${strats.map(s => {
     const sp = s.r.inv ? s.r.units / s.r.inv : 0;
     return `<tr${s.ideal ? ' class="muted"' : ''}><td>${!s.ideal && sp === bestSats ? '🏆 ' : ''}${s.n}</td><td>${money(s.r.inv, cur)}</td><td>${fmtBtc(s.r.units)}</td><td>${money(s.r.avg, cur)}</td><td><b>${nf(sp * 1e8, 0)}</b></td><td>${money(s.r.value, cur)}</td><td class="${s.r.pnlPct >= 0 ? 'up' : 'down'}">${pct(s.r.pnlPct, 0)}</td></tr>`;
   }).join('')}</table>`;
-  const o = opts({ y: { type: 'linear' }, yFmt: v => nf(v, 0), labelFmt: v => nf(v, 0) + ' сат.' });
+  const o = opts({ y: { type: 'linear' }, yFmt: v => nf(v, 0), labelFmt: v => tr('satsN', { n: nf(v, 0) }) });
   o.scales.x = { type: 'category', grid: { display: false } }; o.parsing = true; o.plugins.decimation.enabled = false;
   o.plugins.tooltip.callbacks.title = it => it.length ? it[0].label : '';
   const real = strats.filter(s => !s.ideal);
-  mk('cStrat', { type: 'bar', data: { labels: real.map(s => s.n), datasets: [{ label: `Сатоши за 1 ${sym}`, data: real.map(s => s.r.inv ? s.r.units / s.r.inv * 1e8 : 0), backgroundColor: real.map(s => s.r.inv && s.r.units / s.r.inv === bestSats ? '#22c55e' : '#f7931a'), borderRadius: 4 }] }, options: o });
+  mk('cStrat', { type: 'bar', data: { labels: real.map(s => s.n), datasets: [{ label: tr('satsPerLbl', { c: sym }), data: real.map(s => s.r.inv ? s.r.units / s.r.inv * 1e8 : 0), backgroundColor: real.map(s => s.r.inv && s.r.units / s.r.inv === bestSats ? '#22c55e' : '#f7931a'), borderRadius: 4 }] }, options: o });
 }
 
 function calcCycles() {
   const rows = CY.cycles.map(c => `<tr>
-    <td><span style="color:${CY.colors[c.year]}">●</span> ${c.year}${c.done ? '' : ' (сега)'}</td>
+    <td><span style="color:${CY.colors[c.year]}">●</span> ${c.year}${c.done ? '' : tr('nowParen')}</td>
     <td>${fmtDate(c.h)}<br><span class="muted">${money(c.hp, 'USD')}</span></td>
-    <td>${fmtDate(c.topD)}<br><span class="muted">ден ${c.topD - c.h}</span></td>
+    <td>${fmtDate(c.topD)}<br><span class="muted">${tr('dayN', { n: c.topD - c.h })}</span></td>
     <td>${money(c.top, 'USD', 0)}<br><span class="up">×${nf(c.top / c.hp, 1)}</span></td>
-    <td>${fmtDate(c.botD)}${c.done ? '' : '*'}<br><span class="muted">ден ${c.botD - c.h}</span></td>
+    <td>${fmtDate(c.botD)}${c.done ? '' : '*'}<br><span class="muted">${tr('dayN', { n: c.botD - c.h })}</span></td>
     <td>${money(c.bot, 'USD', 0)}<br><span class="down">${pct((c.bot / c.top - 1) * 100, 0)}</span></td>
     <td>${c.botD - c.topD}</td></tr>`).join('');
-  $('#cyTable').innerHTML = `<table><tr><th>Цикъл</th><th>Халвинг</th><th>Връх (дата)</th><th>Връх</th><th>Дъно (дата)</th><th>Дъно / спад</th><th>Дни връх→дъно</th></tr>${rows}</table><p class="small muted">* текущият цикъл: най-ниската цена след върха досега.</p>`;
+  $('#cyTable').innerHTML = `<table><tr><th>${tr('th.cycle')}</th><th>${tr('th.halving')}</th><th>${tr('th.topDate')}</th><th>${tr('th.top')}</th><th>${tr('th.botDate')}</th><th>${tr('th.botDrop')}</th><th>${tr('th.topToBot')}</th></tr>${rows}</table><p class="small muted">${tr('cy.foot')}</p>`;
   const cur = CY.cur, now = Live.btcUsd ?? B.p[B.p.length - 1];
   const proj = CY.cycles.filter(c => c.done).map(c => {
     const dd = c.bot / c.top, days = c.botD - c.topD, pBot = cur.top * dd, dBot = cur.topD + days;
-    return `<tr><td><span style="color:${CY.colors[c.year]}">●</span> Като ${c.year}</td><td class="down">${pct((dd - 1) * 100, 0)}</td><td>${money(pBot, 'USD', 0)}</td><td>${fmtDate(dBot)}</td><td>${dBot > today() ? 'след ' + nf(dBot - today()) + ' дни' : 'преди ' + nf(today() - dBot) + ' дни'}</td><td class="${pBot < now ? 'down' : 'up'}">${pct((pBot / now - 1) * 100, 0)}</td></tr>`;
+    const when = dBot > today() ? tr('inDays', { n: nf(dBot - today()) }) : tr('daysAgo', { n: nf(today() - dBot) });
+    return `<tr><td><span style="color:${CY.colors[c.year]}">●</span> ${tr('likeY', { y: c.year })}</td><td class="down">${pct((dd - 1) * 100, 0)}</td><td>${money(pBot, 'USD', 0)}</td><td>${fmtDate(dBot)}</td><td>${when}</td><td class="${pBot < now ? 'down' : 'up'}">${pct((pBot / now - 1) * 100, 0)}</td></tr>`;
   }).join('');
-  $('#cyProj').innerHTML = `<table><tr><th>Сценарий</th><th>Спад от върха</th><th>Дъно (цена)</th><th>Дъно (дата)</th><th>Кога</th><th>Спрямо днес</th></tr>${proj}</table>`;
+  $('#cyProj').innerHTML = `<table><tr><th>${tr('th.scenario')}</th><th>${tr('th.dropFromTop')}</th><th>${tr('th.botPrice')}</th><th>${tr('th.botDate')}</th><th>${tr('th.when')}</th><th>${tr('th.vsToday')}</th></tr>${proj}</table>`;
 }
 
 const calcs = { dca: calcDca, day: calcBestDay, months: calcMonths, strat: calcStrat, cycles: calcCycles };
@@ -773,82 +828,103 @@ function showCalc(c) {
 }
 
 // ============================================================ portfolio
-const portfolio = Object.assign({ BTC: { qty: 0, avg: 0, cur: 'EUR' }, MSTR: { qty: 0, avg: 0, cur: 'USD' }, hist: [] }, LS.get('portfolio', {}));
+// Активите в портфолиото. Нов актив: ред тук + цена в livePrice() + <div class="card" id="pos…"> в index.html
+const ASSETS = {
+  BTC: { name: 'Bitcoin', short: 'Bitcoin', badge: '₿', color: '#f7931a', cur: 'EUR', ex: 0.01 },
+  MSTR: { name: 'Strategy (MSTR)', short: 'MSTR', badge: 'M', color: '#d9232e', cur: 'USD', ex: 10 },
+  ASST: { name: 'Strive (ASST)', short: 'ASST', badge: 'S', color: '#2b59c3', cur: 'USD', ex: 10 },
+  GOLD: { nameKey: 'gold.name', shortKey: 'gold.short', badge: 'Au', color: '#d4af37', cur: 'EUR', ex: 1 }, // инвестиционно злато (Тавекс), в грамове
+};
+const aName = a => ASSETS[a].nameKey ? tr(ASSETS[a].nameKey) : ASSETS[a].name;
+const aShort = a => ASSETS[a].shortKey ? tr(ASSETS[a].shortKey) : ASSETS[a].short;
+const portfolio = Object.assign({ hist: [] }, ...Object.entries(ASSETS).map(([a, m]) => ({ [a]: { qty: 0, avg: 0, cur: m.cur } })), LS.get('portfolio', {}));
 const savePortfolio = () => LS.set('portfolio', portfolio);
+// цена за 1 единица (BTC, акция или грам злато) в избраната валута
 function livePrice(asset, cur) {
   const fx = Live.fx || fxAt(today());
   if (asset === 'BTC') return cur === 'EUR' ? (Live.btcEur ?? (Live.btcUsd ?? B.p[B.p.length - 1]) / fx) : (Live.btcUsd ?? B.p[B.p.length - 1]);
-  const u = Live.mstr ?? M.p[M.p.length - 1]; return cur === 'EUR' ? u / fx : u;
+  const u = asset === 'GOLD' ? (goldNow() ?? 0) / OZ : asset === 'ASST' ? (Live.asst ?? A.p[A.p.length - 1] ?? 0) : (Live.mstr ?? M.p[M.p.length - 1]);
+  return cur === 'EUR' ? u / fx : u;
+}
+const unitOf = a => a === 'BTC' ? 'BTC' : a === 'GOLD' ? tr('unit.g') : tr('unit.shares');
+const fmtQty = (a, q) => a === 'BTC' ? fmtBtc(q) : nf(q, a === 'GOLD' ? 2 : 4);
+function posSub(a) {
+  const p = portfolio[a], pnl = p.qty * (livePrice(a, p.cur) - p.avg);
+  return `${money(pnl, p.cur)} · ${fmtQty(a, p.qty)} ${unitOf(a)} · ${tr('pf.avg', { p: money(p.avg, p.cur) })}`;
 }
 function posForm(asset) {
-  const p = portfolio[asset], el = $('#pos' + asset), unit = asset === 'BTC' ? 'BTC' : 'акции';
+  const meta = ASSETS[asset], p = portfolio[asset], el = $('#pos' + asset), unit = unitOf(asset);
   const price = livePrice(asset, p.cur), value = p.qty * price, cost = p.qty * p.avg, pnl = value - cost, pp = cost ? (value / cost - 1) * 100 : 0;
+  const ex = fmtIn(meta.ex);
   el.innerHTML = `
-    <div class="row between"><div class="asset-head"><span class="badge" style="background:${asset === 'BTC' ? '#f7931a' : '#d9232e'}">${asset === 'BTC' ? '₿' : 'M'}</span>${asset === 'BTC' ? 'Bitcoin' : 'Strategy (MSTR)'}</div>
+    <div class="row between"><div class="asset-head"><span class="badge" style="background:${meta.color}">${meta.badge}</span>${aName(asset)}</div>
     <span class="chip ${pnl >= 0 ? 'up' : 'down'}">${p.qty ? pct(pp) : '—'}</span></div>
     <div class="mid">${p.qty ? money(value, p.cur) : '—'}</div>
-    <div class="sub">${p.qty ? `${money(pnl, p.cur)} · ${asset === 'BTC' ? fmtBtc(p.qty) : nf(p.qty, 4)} ${unit} · средна ${money(p.avg, p.cur)}` : 'Въведи позицията си отдолу'}</div>
-    ${asset === 'MSTR' && p.qty && Live.shares ? `<div class="small muted" style="margin-top:4px">≈ ${fmtBtc(p.qty * settings.holdings / Live.shares)} BTC експозиция през Strategy</div>` : ''}
-    <h3>Редактирай позицията</h3>
+    <div class="sub">${p.qty ? posSub(asset) : tr('pf.enter')}</div>
+    ${asset === 'MSTR' && p.qty && Live.shares ? `<div class="small muted" style="margin-top:4px">${tr('pf.exposure', { b: fmtBtc(p.qty * settings.holdings / Live.shares) })}</div>` : ''}
+    ${asset === 'GOLD' ? `<div class="small muted" style="margin-top:4px">${tr('gold.note', { p: money(price, p.cur, 2) })}</div>` : ''}
+    <h3>${tr('pf.edit')}</h3>
     <div class="form" style="margin-bottom:8px">
-      <div class="field"><label>Количество (${unit})</label><input data-f="qty" type="text" inputmode="decimal" autocomplete="off" placeholder="${asset === 'BTC' ? '0,01' : '10'}" value="${fmtIn(p.qty)}"></div>
-      <div class="field"><label>Въвеждам</label><select data-f="mode"><option value="avg">Средна цена</option><option value="pct">% печалба (от Revolut)</option><option value="cost">Общо вложено</option></select></div>
-      <div class="field"><label data-f="lbl">Средна цена</label><input data-f="val" type="text" inputmode="decimal" autocomplete="off" value="${p.avg ? fmtIn(+p.avg.toFixed(2)) : ''}"></div>
-      <div class="field"><label>Валута</label><select data-f="cur"><option ${p.cur === 'EUR' ? 'selected' : ''}>EUR</option><option ${p.cur === 'USD' ? 'selected' : ''}>USD</option></select></div>
+      <div class="field"><label>${tr('pf.qty', { u: unit })}</label><input data-f="qty" type="text" inputmode="decimal" autocomplete="off" placeholder="${ex}" value="${fmtIn(p.qty)}"></div>
+      <div class="field"><label>${tr('pf.mode')}</label><select data-f="mode"><option value="avg">${tr('st.avg')}</option><option value="pct">${tr('pf.m.pct')}</option><option value="cost">${tr('st.invested')}</option></select></div>
+      <div class="field"><label data-f="lbl">${tr('st.avg')}</label><input data-f="val" type="text" inputmode="decimal" autocomplete="off" value="${p.avg ? fmtIn(+p.avg.toFixed(2)) : ''}"></div>
+      <div class="field"><label>${tr('f.cur')}</label><select data-f="cur"><option ${p.cur === 'EUR' ? 'selected' : ''}>EUR</option><option ${p.cur === 'USD' ? 'selected' : ''}>USD</option></select></div>
     </div>
-    <div class="row"><button class="btn sm" data-f="save">Запази</button></div>
-    <h3>Добави нова покупка</h3>
+    <div class="row"><button class="btn sm" data-f="save">${tr('save')}</button></div>
+    <h3>${tr('pf.addBuy')}</h3>
     <div class="form" style="margin-bottom:8px">
-      <div class="field"><label>Купено количество</label><input data-f="bq" type="text" inputmode="decimal" autocomplete="off" placeholder="${asset === 'BTC' ? '0,01' : '1'}"></div>
-      <div class="field"><label>Цена на покупка (${p.cur})</label><input data-f="bp" type="text" inputmode="decimal" autocomplete="off" placeholder="${nf(price, 2)}"></div>
+      <div class="field"><label>${tr('pf.boughtQty')}</label><input data-f="bq" type="text" inputmode="decimal" autocomplete="off" placeholder="${asset === 'BTC' ? ex : '1'}"></div>
+      <div class="field"><label>${tr('pf.buyPrice', { c: p.cur })}</label><input data-f="bp" type="text" inputmode="decimal" autocomplete="off" placeholder="${nf(price, 2)}"></div>
     </div>
-    <button class="btn sm ghost" data-f="buy">Добави към позицията</button>`;
+    <button class="btn sm ghost" data-f="buy">${tr('pf.addToPos')}</button>`;
   const f = n => $(`[data-f="${n}"]`, el);
   f('mode').onchange = () => {
     const m = f('mode').value, inp = f('val');
-    f('lbl').textContent = m === 'avg' ? 'Средна цена' : m === 'pct' ? 'Печалба/загуба в %' : 'Общо вложено';
+    f('lbl').textContent = tr(m === 'avg' ? 'st.avg' : m === 'pct' ? 'pf.lbl.pct' : 'st.invested');
     inp.inputMode = m === 'pct' ? 'text' : 'decimal'; // за загуба трябва минус, а цифровата клавиатура на iPhone няма минус
-    inp.placeholder = m === 'pct' ? 'напр. 12,5 или -8,3' : '';
+    inp.placeholder = m === 'pct' ? tr('pf.ph.pct') : '';
     inp.value = '';
   };
   f('save').onclick = () => {
     const qs = f('qty').value.trim(), vs = f('val').value.trim();
     const qty = qs ? num(qs) : 0, v = num(vs), c = f('cur').value, m = f('mode').value, pr = livePrice(asset, c);
-    if (!isFinite(qty) || qty < 0) return toast('Невалидно количество. Пример: 0,01');
-    if (vs && !isFinite(v)) return toast('Невалидна стойност. Пример: 12,5');
-    if (m === 'pct' && v <= -100) return toast('Загубата не може да е 100% или повече');
+    if (!isFinite(qty) || qty < 0) return toast(tr('e.qty', { ex }));
+    if (vs && !isFinite(v)) return toast(tr('e.val', { ex: fmtIn(12.5) }));
+    if (m === 'pct' && v <= -100) return toast(tr('e.loss'));
     let avg = p.avg;
     if (isFinite(v)) avg = m === 'avg' ? v : m === 'pct' ? pr / (1 + v / 100) : (qty ? v / qty : 0);
     if (c !== p.cur && !isFinite(v)) avg = c === 'EUR' ? p.avg / (Live.fx || fxAt(today())) : p.avg * (Live.fx || fxAt(today()));
-    Object.assign(p, { qty, avg, cur: c }); savePortfolio(); renderPortfolio(); toast('Запазено ✓');
+    Object.assign(p, { qty, avg, cur: c }); savePortfolio(); renderPortfolio(); toast(tr('saved'));
   };
   f('buy').onclick = () => {
     const q = num(f('bq').value), bs = f('bp').value.trim(), bp = bs ? num(bs) : price;
-    if (!(q > 0)) return toast('Въведи количество. Пример: 0,01');
-    if (!(bp > 0)) return toast('Невалидна цена');
-    const nq = p.qty + q; p.avg = (p.qty * p.avg + q * bp) / nq; p.qty = nq; savePortfolio(); renderPortfolio(); toast('Покупката е добавена ✓');
+    if (!(q > 0)) return toast(tr('e.enterQty', { ex }));
+    if (!(bp > 0)) return toast(tr('e.price'));
+    const nq = p.qty + q; p.avg = (p.qty * p.avg + q * bp) / nq; p.qty = nq; savePortfolio(); renderPortfolio(); toast(tr('buyAdded'));
   };
 }
 function portfolioTotals() {
   const fx = Live.fx || fxAt(today());
   const toUsd = (v, c) => c === 'EUR' ? v * fx : v;
-  let usd = 0, cost = 0;
-  for (const a of ['BTC', 'MSTR']) { const p = portfolio[a]; usd += toUsd(p.qty * livePrice(a, p.cur), p.cur); cost += toUsd(p.qty * p.avg, p.cur); }
+  let usd = 0, cost = 0; const byAsset = {};
+  for (const a of Object.keys(ASSETS)) {
+    const p = portfolio[a]; byAsset[a] = toUsd(p.qty * livePrice(a, p.cur), p.cur);
+    usd += byAsset[a]; cost += toUsd(p.qty * p.avg, p.cur);
+  }
   const btcUsd = Live.btcUsd ?? B.p[B.p.length - 1];
-  return { usd, eur: usd / fx, cost, pnl: usd - cost, pp: cost ? (usd / cost - 1) * 100 : 0, inBtc: usd / btcUsd, fx };
+  return { usd, eur: usd / fx, cost, pnl: usd - cost, pp: cost ? (usd / cost - 1) * 100 : 0, inBtc: usd / btcUsd, fx, byAsset };
 }
 function renderPortfolioTotals() {
   const t = portfolioTotals();
   $('#pTotal').textContent = money(t.eur, 'EUR', 0);
   $('#pTotal2').textContent = money(t.usd, 'USD', 0);
   const c = $('#pTotalPnl'); c.textContent = t.cost ? `${pct(t.pp)} · ${money(t.pnl / t.fx, 'EUR', 0)}` : '—'; c.className = 'chip ' + (t.pnl >= 0 ? 'up' : 'down');
-  const b = portfolio.BTC, m = portfolio.MSTR, fx = t.fx;
-  const bU = (b.cur === 'EUR' ? fx : 1) * b.qty * livePrice('BTC', b.cur), mU = (m.cur === 'EUR' ? fx : 1) * m.qty * livePrice('MSTR', m.cur);
+  const share = a => t.usd ? tr('pf.share', { n: nf(t.byAsset[a] / t.usd * 100, 0) }) : '';
+  const qtyTxt = a => { const q = portfolio[a].qty; return a === 'BTC' ? fmtBtc(q) + ' BTC' : a === 'GOLD' ? tr('pf.nGrams', { n: nf(q, 2) }) : tr('pf.nShares', { n: nf(q, 2) }); };
   $('#pStats').innerHTML = [
-    statBox('Общо в BTC', fmtBtc(t.inBtc) + ' BTC', 'Цялото портфолио, превърнато в BTC'),
-    statBox('Bitcoin', fmtBtc(b.qty) + ' BTC', t.usd ? nf(bU / t.usd * 100, 0) + '% от портфолиото' : ''),
-    statBox('MSTR', nf(m.qty, 2) + ' акции', t.usd ? nf(mU / t.usd * 100, 0) + '% от портфолиото' : ''),
-    statBox('Общо вложено', money(t.cost / fx, 'EUR', 0), money(t.cost, 'USD', 0)),
+    statBox(tr('pf.inBtc'), fmtBtc(t.inBtc) + ' BTC', tr('pf.inBtc.s')),
+    ...Object.keys(ASSETS).map(a => statBox(aShort(a), qtyTxt(a), share(a))),
+    statBox(tr('st.invested'), money(t.cost / t.fx, 'EUR', 0), money(t.cost, 'USD', 0)),
   ].join('');
 }
 function snapshotPortfolio() {
@@ -860,17 +936,17 @@ function snapshotPortfolio() {
   savePortfolio();
 }
 function renderPortfolio() {
-  posForm('BTC'); posForm('MSTR'); renderPortfolioTotals(); snapshotPortfolio();
+  Object.keys(ASSETS).forEach(posForm); renderPortfolioTotals(); snapshotPortfolio();
   const h = portfolio.hist;
-  $('#pHistHint').textContent = h.length < 2 ? 'Графиката с историята на портфолиото се появява от втория ден: всеки ден, в който отвориш приложението, се записва една точка.' : '';
+  $('#pHistHint').textContent = h.length < 2 ? tr('pf.hist') : '';
   $('#cPortHist').parentElement.hidden = h.length < 2;
   if (h.length < 2) return;
   const o = opts({ y: { type: 'linear' }, legend: true, yFmt: v => fmtShort(v, 'USD') });
   o.scales.y2 = { type: 'linear', position: 'left', grid: { display: false }, ticks: { callback: v => nf(v, 3) } };
   o.plugins.tooltip.callbacks.label = c => c.dataset.yAxisID === 'y2' ? ` ${fmtBtc(c.parsed.y)} BTC` : ` ${money(c.parsed.y, 'USD', 0)}`;
   mk('cPortHist', { type: 'line', data: { datasets: [
-    { label: 'Стойност ($)', data: h.map(x => ({ x: x.d, y: x.usd })), borderColor: '#f7931a', borderWidth: 2, pointRadius: h.length < 30 ? 2 : 0 },
-    { label: 'В BTC', data: h.map(x => ({ x: x.d, y: x.btc })), borderColor: '#22c55e', borderWidth: 1.5, pointRadius: h.length < 30 ? 2 : 0, yAxisID: 'y2' },
+    { label: tr('l.valueUsd'), data: h.map(x => ({ x: x.d, y: x.usd })), borderColor: '#f7931a', borderWidth: 2, pointRadius: h.length < 30 ? 2 : 0 },
+    { label: tr('l.inBtc'), data: h.map(x => ({ x: x.d, y: x.btc })), borderColor: '#22c55e', borderWidth: 1.5, pointRadius: h.length < 30 ? 2 : 0, yAxisID: 'y2' },
   ] }, options: o });
 }
 
@@ -878,20 +954,20 @@ function renderPortfolio() {
 async function loadNews() {
   try {
     const n = await getJSON('data/news.json');
-    $('#newsUpd').textContent = 'обновено ' + new Date(n.updated).toLocaleString('bg-BG', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    $('#newsUpd').textContent = tr('news.upd', { t: new Date(n.updated).toLocaleString(loc(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) });
     const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const safeUrl = u => /^https:\/\//.test(u || '') ? esc(u) : '';
     $('#newsList').innerHTML = n.items.map(x => `<a href="${safeUrl(x.link)}" target="_blank" rel="noopener">
       ${x.img ? `<img src="${safeUrl(x.img)}" alt="" loading="lazy">` : ''}
-      <div class="body"><time>${new Date(x.date).toLocaleString('bg-BG', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</time><h4>${esc(x.title)}</h4><p>${esc(x.desc)}</p></div></a>`).join('');
-  } catch { $('#newsList').innerHTML = '<p class="muted">Новините не могат да се заредят в момента.</p>'; }
+      <div class="body"><time>${new Date(x.date).toLocaleString(loc(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</time><h4>${esc(x.title)}</h4><p>${esc(x.desc)}</p></div></a>`).join('');
+  } catch { $('#newsList').innerHTML = `<p class="muted">${tr('news.err')}</p>`; }
 }
 
 // ============================================================ alerts
 const alerts = LS.get('alerts', []);
-const AL_NAMES = { btc_above: 'BTC над $', btc_below: 'BTC под $', mstr_above: 'MSTR над $', mstr_below: 'MSTR под $', fng_below: 'Fear & Greed под', score_below: 'Сигнал под', score_above: 'Сигнал над' };
+const alName = type => tr('al.' + type);
 function renderAlerts() {
-  $('#alertList').innerHTML = alerts.map((a, k) => `<div class="alert-item ${a.fired ? 'fired' : ''}"><span>${a.fired ? '✅ ' : '🔔 '}${AL_NAMES[a.type]} ${nf(a.value, a.value < 1000 ? 2 : 0)}</span><span class="row">${a.fired ? `<button class="btn sm ghost" data-rearm="${k}">Активирай</button>` : ''}<button class="btn sm danger" data-del="${k}">✕</button></span></div>`).join('') || '<p class="small muted">Няма аларми.</p>';
+  $('#alertList').innerHTML = alerts.map((a, k) => `<div class="alert-item ${a.fired ? 'fired' : ''}"><span>${a.fired ? '✅ ' : '🔔 '}${alName(a.type)} ${nf(a.value, a.value < 1000 ? 2 : 0)}</span><span class="row">${a.fired ? `<button class="btn sm ghost" data-rearm="${k}">${tr('al.rearm')}</button>` : ''}<button class="btn sm danger" data-del="${k}">✕</button></span></div>`).join('') || `<p class="small muted">${tr('al.none')}</p>`;
 }
 function checkAlerts() {
   const v = {
@@ -904,7 +980,7 @@ function checkAlerts() {
     if (x == null) continue;
     if ((dir === 'above' && x >= a.value) || (dir === 'below' && x <= a.value)) {
       a.fired = true; changed = true;
-      const msg = `${AL_NAMES[a.type]} ${nf(a.value, 0)}: сега ${k === 'btc' || k === 'mstr' ? money(x, 'USD') : nf(x, 0)}`;
+      const msg = `${alName(a.type)} ${nf(a.value, 0)}: ${tr('now')} ${k === 'btc' || k === 'mstr' ? money(x, 'USD') : nf(x, 0)}`;
       toast('🔔 ' + msg, 6000); notify('More BTC', msg);
     }
   }
@@ -927,17 +1003,17 @@ function wireSettings() {
   $('#openSettings').onclick = openSettings;
   document.addEventListener('click', e => { if (e.target.closest('[data-open-settings]')) { e.preventDefault(); openSettings(); } });
   $('#closeSettings').onclick = () => $('#settings').close();
-  $('#saveKey').onclick = () => { settings.key = $('#setKey').value.trim(); saveSettings(); Live.mcap = Live.shares = null; Live.lastMstr = 0; $('#keyStatus').textContent = 'Проверка…'; connectFinnhub(); pollMstr(); };
-  $('#saveHold').onclick = () => { settings.holdings = num($('#setHold').value) || settings.holdings; saveSettings(); dirty = true; toast('Запазено ✓'); };
-  $('#addAlert').onclick = () => { const v = num($('#alVal').value); if (!isFinite(v)) return toast('Въведи стойност'); alerts.push({ type: $('#alType').value, value: v, fired: false }); LS.set('alerts', alerts); $('#alVal').value = ''; renderAlerts(); };
+  $('#saveKey').onclick = () => { settings.key = $('#setKey').value.trim(); saveSettings(); Live.mcap = Live.shares = null; Live.lastMstr = 0; $('#keyStatus').textContent = tr('key.checking'); connectFinnhub(); pollMstr(); };
+  $('#saveHold').onclick = () => { settings.holdings = num($('#setHold').value) || settings.holdings; saveSettings(); dirty = true; toast(tr('saved')); };
+  $('#addAlert').onclick = () => { const v = num($('#alVal').value); if (!isFinite(v)) return toast(tr('e.enterVal')); alerts.push({ type: $('#alType').value, value: v, fired: false }); LS.set('alerts', alerts); $('#alVal').value = ''; renderAlerts(); };
   $('#alertList').onclick = e => {
     const d = e.target.dataset.del, r = e.target.dataset.rearm;
     if (d != null) alerts.splice(+d, 1); else if (r != null) alerts[+r].fired = false; else return;
     LS.set('alerts', alerts); renderAlerts();
   };
   $('#notifPerm').onclick = async () => {
-    if (!('Notification' in window)) return toast('На iPhone първо добави приложението към началния екран');
-    const p = await Notification.requestPermission(); toast(p === 'granted' ? 'Известията са разрешени ✓' : 'Известията не са разрешени');
+    if (!('Notification' in window)) return toast(tr('notif.ios'));
+    const p = await Notification.requestPermission(); toast(tr(p === 'granted' ? 'notif.ok' : 'notif.no'));
   };
   $('#exportBtn').onclick = () => {
     const blob = new Blob([JSON.stringify({ app: 'more-btc', v: 1, settings: { ...settings, key: settings.key }, portfolio, alerts }, null, 2)], { type: 'application/json' });
@@ -949,11 +1025,11 @@ function wireSettings() {
       if (j.settings) { Object.assign(settings, j.settings); saveSettings(); }
       if (j.portfolio) LS.set('portfolio', j.portfolio);
       if (j.alerts) LS.set('alerts', j.alerts);
-      toast('Данните са възстановени ✓'); setTimeout(() => location.reload(), 800);
-    } catch { toast('Невалиден файл'); }
+      toast(tr('restored')); setTimeout(() => location.reload(), 800);
+    } catch { toast(tr('badFile')); }
   };
   $('#resetBtn').onclick = () => {
-    if (!confirm('Да изтрия ли портфолиото, алармите и настройките от това устройство?')) return;
+    if (!confirm(tr('resetQ'))) return;
     ['settings', 'portfolio', 'alerts', 'fngCache', 'tab', 'calc'].forEach(LS.del); location.reload();
   };
 }
@@ -991,6 +1067,8 @@ function wire() {
   segWire('.seg[data-range="rsi"]', chartRsi);
   segWire('#cycleMode', chartCycles);
   segWire('#mstrMode', chartMstr);
+  segWire('.seg[data-range="gold"]', chartGold);
+  segWire('#goldMode', chartGold);
   segWire('#mAsset', calcMonths);
   $$('[data-ov]').forEach(x => x.onchange = chartPrice);
   $('#calcNav').onclick = e => { const b = e.target.closest('button'); if (b) showCalc(b.dataset.c); };
@@ -1010,7 +1088,7 @@ function wire() {
 // ============================================================ boot
 async function boot() {
   wire();
-  try { await loadData(); } catch (e) { $('#boot').textContent = 'Данните не можаха да се заредят. Провери интернет връзката и опитай пак.'; console.error(e); return; }
+  try { await loadData(); } catch (e) { $('#boot').textContent = tr('boot.err'); console.error(e); return; }
   computeIndicators();
   $('#boot').remove();
   connectCoinbase(); connectFinnhub(); pollBtc(); pollMstr(); pollHeight();
@@ -1020,7 +1098,7 @@ async function boot() {
   setInterval(() => { // UI тик всяка секунда, само ако има промяна
     const live = Date.now() - Live.lastBtc < 15000;
     $('#liveDot').classList.toggle('on', live);
-    $('#liveTxt').textContent = live ? 'наживо' : 'офлайн';
+    $('#liveTxt').textContent = tr(live ? 'live.on' : 'live.off');
     if (!dirty) return; dirty = false;
     syncTodayIntoHistory();
     if (Date.now() - lastFull > 30000) { lastFull = Date.now(); computeIndicators(); }
@@ -1042,12 +1120,12 @@ async function boot() {
 }
 // при живо обновяване в портфолиото обновяваме само заглавните редове, за да не губим въведеното във формите
 function posFormLight() {
-  for (const a of ['BTC', 'MSTR']) {
+  for (const a of Object.keys(ASSETS)) {
     const el = $('#pos' + a), p = portfolio[a]; if (!el || !p.qty) continue;
     const price = livePrice(a, p.cur), value = p.qty * price, cost = p.qty * p.avg, pnl = value - cost;
     $('.mid', el).textContent = money(value, p.cur);
     const chip = $('.chip', el); chip.textContent = pct(cost ? (value / cost - 1) * 100 : 0); chip.className = 'chip ' + (pnl >= 0 ? 'up' : 'down');
-    $('.sub', el).textContent = `${money(pnl, p.cur)} · ${a === 'BTC' ? fmtBtc(p.qty) : nf(p.qty, 4)} ${a === 'BTC' ? 'BTC' : 'акции'} · средна ${money(p.avg, p.cur)}`;
+    $('.sub', el).textContent = posSub(a);
   }
 }
 
@@ -1055,9 +1133,9 @@ function posFormLight() {
 let installEvt = null;
 const showInstall = on => { $('#installBtn').hidden = !on; $('#installBtn2').hidden = !on; };
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; showInstall(true); });
-window.addEventListener('appinstalled', () => { installEvt = null; showInstall(false); toast('Приложението е инсталирано ✓'); });
+window.addEventListener('appinstalled', () => { installEvt = null; showInstall(false); toast(tr('installed')); });
 async function doInstall() {
-  if (!installEvt) return toast('Меню ⋮ → „Инсталиране на приложението“', 4000);
+  if (!installEvt) return toast(tr('installHint'), 4000);
   installEvt.prompt();
   await installEvt.userChoice.catch(() => { });
   installEvt = null; showInstall(false);
@@ -1065,7 +1143,26 @@ async function doInstall() {
 $('#installBtn').onclick = doInstall;
 $('#installBtn2').onclick = doInstall;
 
-$('#appVersion').textContent = `More BTC · версия ${APP_VERSION}`;
+// ============================================================ languages
+function renderLangUi() {
+  $('#langBtn').textContent = LANG.toUpperCase();
+  $$('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.l === LANG));
+  $('#appVersion').textContent = tr('version', { v: APP_VERSION });
+}
+function setLang(l) {
+  if (!LANGS[l] || l === LANG) return;
+  LANG = l; settings.lang = l; saveSettings();
+  applyI18n(); renderLangUi();
+  fillDays($('#dDom')); fillDays($('#sDom'));
+  if (!B.p.length) return; // данните още се зареждат: boot() ще нарисува всичко на новия език
+  rendered.news = false;
+  renderMarket(); showTab(curTab);
+  if ($('#settings').open) renderAlerts();
+}
+$('#langBtn').onclick = () => { const ls = Object.keys(LANGS); setLang(ls[(ls.indexOf(LANG) + 1) % ls.length]); };
+$('#langSeg').onclick = e => { const b = e.target.closest('button'); if (b) setLang(b.dataset.l); };
+applyI18n(); renderLangUi();
+
 boot();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   // нова версия на сайта → новият service worker поема страницата → презареждаме веднъж, за да се види веднага

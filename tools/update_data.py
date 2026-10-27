@@ -57,13 +57,28 @@ def btc():
     save("btc.json", s)
 
 
-def mstr():
-    s = load("mstr.json")
-    r = json.loads(get("https://query1.finance.yahoo.com/v8/finance/chart/MSTR?period1=1262304000&period2=4102444800&interval=1d"))["chart"]["result"][0]
+def stock(sym, name=None):
+    """Дневни цени от Yahoo (USD, коригирани за сплит) → data/<sym>.json.
+    Цялата история се тегли наново, за да се преизчисли при нов сплит."""
+    name = name or sym.lower() + ".json"
+    s = load(name)
+    r = json.loads(get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?period1=1262304000&period2=4102444800&interval=1d"))["chart"]["result"][0]
     for t, c in zip(r["timestamp"], r["indicators"]["quote"][0]["close"]):
         if c:
             s[day(t)] = c
-    save("mstr.json", s)
+    save(name, s)
+
+
+def mstr():
+    stock("MSTR")
+
+
+def asst():
+    stock("ASST")  # Strive, Inc.
+
+
+def gold():
+    stock("GC=F", "gold.json")  # злато, USD за тройунция (фючърс)
 
 
 def eurusd():
@@ -103,5 +118,5 @@ def news():
 
 if __name__ == "__main__":
     DATA.mkdir(exist_ok=True)
-    for f in (btc, mstr, eurusd, news):
+    for f in (btc, mstr, asst, gold, eurusd, news):
         step(f)
