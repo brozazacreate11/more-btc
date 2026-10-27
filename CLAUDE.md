@@ -1,0 +1,22 @@
+# More BTC
+
+PWA за Bitcoin и MSTR (iPhone през „Добави към началния екран“). Потребителят пише на български: отговаряй на български, текстовете в приложението също са на български.
+
+## Архитектура
+- Статичен сайт без build стъпка: `index.html`, `app.css`, `app.js` (един файл, разделен на секции с `// ====`), `sw.js`, `manifest.webmanifest`. Хостинг: GitHub Pages.
+- Единствена външна библиотека: Chart.js 4.4.1 от cdnjs (линейна ос X с дни от 1970 г., без date adapter).
+- Исторически данни в `data/*.json` във формат `{"updated": ISO, "d": [[ден_от_1970, цена], ...]}`. `.github/workflows/deploy.yml` се пуска при всеки push в `main` и всеки час: `tools/update_data.py` обновява данните (BTC: blockchain.info + Binance; MSTR: Yahoo; EUR/USD: Frankfurter; новини: RSS на Bitcoin Magazine), после сайтът се публикува в GitHub Pages (source = GitHub Actions).
+- Наживо в браузъра: BTC от Coinbase WebSocket (BTC-USD и BTC-EUR, от тях и EUR/USD курсът), MSTR от Finnhub (ключ в настройките), Fear & Greed от alternative.me, височина на блока от mempool.space.
+- Личните данни (портфолио, аларми, Finnhub ключ) са само в `localStorage` с префикс `morebtc.`. Никога не ги пращай към сървър и не ги слагай в repo-то.
+
+## Модели
+- Сигнал 0–100 (`scoreAt`): средно от Rainbow, Mayer Multiple, цена/200W MA, седмичен RSI, Fear & Greed, позиция в цикъла и Pi Cycle. 0 = натрупване, 100 = продажба.
+- Цикли (`computeCycles`): започват от халвинга. Върхът се търси в първите 800 дни, дъното до 1200-ия ден. Цветове: текущият цикъл винаги е зелен, предишният лилав.
+- DCA двигател (`dca`): месечни покупки на избран ден. За MSTR, ако денят не е работен, покупката е на следващия. Сумите в EUR се превръщат по историческия курс.
+
+## Локален тест
+`.claude/launch.json` → сървър `more-btc` на http://localhost:8787 (preview_start).
+
+## Правила при промени
+- При промяна на файловете от `SHELL` в `sw.js` вдигни `CACHE` версията (`morebtc-vN`).
+- Нови функции → бектествай ги върху историческите данни, преди да кажеш, че работят.

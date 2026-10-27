@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>More BTC</title>
+<meta name="description" content="Биткойн и MSTR: цени наживо, цикли, сигнали за натрупване, DCA калкулатори и портфолио.">
+<meta name="theme-color" content="#0b0c10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="More BTC">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header class="top">
+  <img src="icons/icon.svg" alt="">
+  <h1>More BTC</h1>
+  <div class="live" title="Връзка в реално време"><span class="dot" id="liveDot"></span><span id="liveTxt">…</span></div>
+  <div class="spacer"></div>
+  <div class="scale-toggle" id="scaleToggle" title="Мащаб на графиките">
+    <button data-scale="linear">LIN</button><button data-scale="log">LOG</button>
+  </div>
+  <button class="iconbtn" id="openSettings" aria-label="Настройки">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+</header>
+
+<main>
+  <div class="loading" id="boot">Зареждане на данни…</div>
+
+  <!-- ================= ПАЗАР ================= -->
+  <section class="view" id="v-market">
+    <div class="hero">
+      <div class="card">
+        <div class="asset-head"><span class="badge" style="background:#f7931a">₿</span>Bitcoin · BTC</div>
+        <div class="big" id="btcUsd">—</div>
+        <div class="row" style="margin-top:6px"><span class="sub" id="btcEur">—</span><span class="chip" id="btcChg">—</span></div>
+        <div class="row small muted" style="margin-top:10px">
+          <span>ATH: <b id="athTxt">—</b></span><span>·</span><span>От ATH: <b id="ddTxt">—</b></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="asset-head"><span class="badge" style="background:#d9232e">M</span>Strategy · MSTR</div>
+        <div class="mid" id="mstrUsd">—</div>
+        <div class="row" style="margin-top:6px"><span class="sub" id="mstrEur">—</span><span class="chip" id="mstrChg">—</span></div>
+        <div class="row small muted" style="margin-top:10px">
+          <span>mNAV: <b id="mnavTxt">—</b></span><span>·</span><span>BTC/акция: <b id="bpsTxt">—</b></span>
+        </div>
+        <div class="small muted" id="mstrNote" style="margin-top:6px"></div>
+      </div>
+    </div>
+
+    <div class="grid two" style="margin-top:14px">
+      <div class="card">
+        <h2>Сигнал: натрупване ↔ продажба</h2>
+        <p class="hint">Комбиниран резултат 0–100 от цикъла, Rainbow, RSI, Fear &amp; Greed, Mayer Multiple, 200W MA и Pi Cycle.</p>
+        <div class="row" style="gap:14px;align-items:flex-end">
+          <div class="score-num" id="scoreNum">—</div>
+          <div><div class="score-label" id="scoreLabel">—</div><div class="small muted" id="scoreSub"></div></div>
+        </div>
+        <div class="gauge"><div class="marker" id="scoreMarker" style="left:50%"></div></div>
+        <div class="gauge-labels"><span>Натрупвай</span><span>HODL</span><span>Продавай</span></div>
+        <div class="comp" id="scoreComp"></div>
+      </div>
+
+      <div class="card">
+        <h2>4-годишен цикъл</h2>
+        <p class="hint" id="cycleHint">—</p>
+        <div class="score-label" id="phaseTxt">—</div>
+        <div class="progress" id="cycleBar"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">Дни след халвинга</div><div class="v" id="daysSinceH">—</div><div class="s" id="lastHTxt"></div></div>
+          <div class="stat"><div class="k">Следващ халвинг</div><div class="v" id="nextHTxt">—</div><div class="s" id="blocksLeft"></div></div>
+          <div class="stat"><div class="k">Връх на цикъла</div><div class="v" id="cTop">—</div><div class="s" id="cTopS"></div></div>
+          <div class="stat"><div class="k">Дъно след върха</div><div class="v" id="cBot">—</div><div class="s" id="cBotS"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Индикатори</h2>
+      <div class="stats" id="indStats" style="margin-top:10px"></div>
+    </div>
+    <p class="disclaimer">Инструмент за анализ, не е финансов съвет. Историческите цикли не гарантират бъдещи резултати.</p>
+  </section>
+
+  <!-- ================= ГРАФИКИ ================= -->
+  <section class="view" id="v-charts">
+    <div class="card">
+      <div class="row between">
+        <h2>Цена на Bitcoin</h2>
+        <div class="seg" data-range="price"><button data-y="1">1Г</button><button data-y="2">2Г</button><button data-y="4" class="on">4Г</button><button data-y="0">Всичко</button></div>
+      </div>
+      <div class="toggles" style="margin-top:10px">
+        <label><input type="checkbox" data-ov="signal" checked>Оцветяване по сигнал</label>
+        <label><input type="checkbox" data-ov="wma200" checked>200W MA</label>
+        <label><input type="checkbox" data-ov="sma200">200D MA</label>
+        <label><input type="checkbox" data-ov="halvings" checked>Халвинги</label>
+      </div>
+      <div class="chart tall"><canvas id="cPrice"></canvas></div>
+      <div class="legend" id="lgPrice"></div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <h2>Сравнение на циклите</h2>
+        <div class="seg" id="cycleMode"><button data-m="halving" class="on">От халвинга</button><button data-m="bottom">От дъното</button><button data-m="top">От върха</button></div>
+      </div>
+      <p class="hint" id="cycleModeHint"></p>
+      <div class="chart tall"><canvas id="cCycles"></canvas></div>
+      <div class="legend" id="lgCycles"></div>
+    </div>
+
+    <div class="card">
+      <h2>Rainbow графика</h2>
+      <p class="hint">Логаритмична регресия на цялата история с 9 цветни зони. Сега сме в: <b id="rbNow">—</b></p>
+      <div class="chart tall"><canvas id="cRainbow"></canvas></div>
+      <div class="legend" id="lgRainbow"></div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <h2>MSTR спрямо Bitcoin</h2>
+        <div class="seg" id="mstrMode"><button data-m="norm" class="on">Нормализирано</button><button data-m="mstrbtc">MSTR в BTC</button><button data-m="btcmstr">BTC в MSTR</button></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="seg" data-range="mstr"><button data-y="1">1Г</button><button data-y="2">2Г</button><button data-y="s" class="on">От 08.2020</button><button data-y="0">Всичко</button></div>
+      </div>
+      <p class="hint" id="mstrHint" style="margin-top:10px"></p>
+      <div class="chart"><canvas id="cMstr"></canvas></div>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <div class="row between">
+          <h2>RSI</h2>
+          <div class="seg" data-range="rsi"><button data-y="1">1Г</button><button data-y="2" class="on">2Г</button><button data-y="4">4Г</button><button data-y="0">Всичко</button></div>
+        </div>
+        <div class="chart"><canvas id="cRsi"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Fear &amp; Greed индекс</h2>
+        <div class="chart"><canvas id="cFng"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Сигналът през историята</h2>
+      <p class="hint">Синьо = исторически добро време за натрупване, червено = зона за продажба. Така можеш да провериш как сигналът би работил в миналото.</p>
+      <div class="chart"><canvas id="cScoreP"></canvas></div>
+      <div class="chart short"><canvas id="cScore"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ================= КАЛКУЛАТОРИ ================= -->
+  <section class="view" id="v-calc">
+    <div class="subnav" id="calcNav">
+      <button data-c="dca" class="on">DCA калкулатор</button>
+      <button data-c="day">Най-добър ден</button>
+      <button data-c="months">Плюс/минус месеци</button>
+      <button data-c="strat">Стратегии</button>
+      <button data-c="cycles">Цикли</button>
+    </div>
+
+    <!-- DCA -->
+    <div class="card calc" id="c-dca">
+      <h2>Ако бях купувал всеки месец…</h2>
+      <p class="hint">Пример: всеки месец на 20-о число през последните 5 години. Ако денят не е работен (за MSTR), покупката е на следващия.</p>
+      <div class="form">
+        <div class="field"><label>Актив</label><select id="dAsset"><option>BTC</option><option>MSTR</option></select></div>
+        <div class="field"><label>Сума на покупка</label><input id="dAmt" type="number" inputmode="decimal" value="100" min="1"></div>
+        <div class="field"><label>Валута</label><select id="dCur"><option>EUR</option><option>USD</option></select></div>
+        <div class="field"><label>Ден от месеца</label><select id="dDom"></select></div>
+        <div class="field"><label>От дата</label><input id="dFrom" type="date"></div>
+        <div class="field"><label>До дата</label><input id="dTo" type="date"></div>
+        <div class="field"><label>Кога да купувам</label><select id="dFilter">
+          <option value="all">Всеки месец</option>
+          <option value="bear">Само в мечи пазар (BTC под 200D MA)</option>
+          <option value="fear">Само при Fear &amp; Greed ≤ праг</option>
+          <option value="score">Само при сигнал ≤ праг</option>
+        </select></div>
+        <div class="field" id="dThrWrap" hidden><label>Праг</label><input id="dThr" type="number" value="30" min="0" max="100"></div>
+      </div>
+      <div class="stats" id="dRes"></div>
+      <div class="chart"><canvas id="cDca"></canvas></div>
+      <div class="chart short"><canvas id="cDcaAvg"></canvas></div>
+      <details><summary>Всички покупки</summary><div class="tablewrap" id="dTable"></div></details>
+    </div>
+
+    <!-- Best day -->
+    <div class="card calc" id="c-day" hidden>
+      <h2>Кой ден от месеца е бил най-изгоден?</h2>
+      <p class="hint">За всеки ден от 1 до 28 смятаме средната цена, ако си купувал всеки месец точно на този ден. По-ниска средна цена значи повече BTC за същите пари.</p>
+      <div class="form">
+        <div class="field"><label>Актив</label><select id="bAsset"><option>BTC</option><option>MSTR</option></select></div>
+        <div class="field"><label>От дата</label><input id="bFrom" type="date"></div>
+        <div class="field"><label>До дата</label><input id="bTo" type="date"></div>
+        <div class="field"><label>Период</label><select id="bFilter"><option value="all">Всички месеци</option><option value="bear">Само мечи пазар</option><option value="bull">Само бичи пазар</option></select></div>
+      </div>
+      <div class="note" id="bBest"></div>
+      <div class="chart"><canvas id="cBestDay"></canvas></div>
+      <h3>Ден от седмицата (седмично купуване)</h3>
+      <div class="chart short"><canvas id="cBestWd"></canvas></div>
+    </div>
+
+    <!-- Months -->
+    <div class="card calc" id="c-months" hidden>
+      <div class="row between">
+        <h2>Плюс и минус месеци</h2>
+        <div class="seg" id="mAsset"><button data-a="BTC" class="on">BTC</button><button data-a="MSTR">MSTR</button></div>
+      </div>
+      <p class="hint">Промяна на цената за всеки месец. Най-долу: средно, медиана и колко често месецът е бил плюсов.</p>
+      <div class="tablewrap" id="mHeat"></div>
+      <h3>По година от 4-годишния цикъл</h3>
+      <div class="tablewrap" id="mCycleYears"></div>
+    </div>
+
+    <!-- Strategies -->
+    <div class="card calc" id="c-strat" hidden>
+      <h2>Сравнение на стратегии за натрупване</h2>
+      <p class="hint">Една и съща базова месечна сума, различни правила. Гледай „сатоши за 1 €/$“: колкото повече, толкова по-ефективно е натрупването.</p>
+      <div class="form">
+        <div class="field"><label>Базова сума / месец</label><input id="sAmt" type="number" value="100" min="1"></div>
+        <div class="field"><label>Валута</label><select id="sCur"><option>EUR</option><option>USD</option></select></div>
+        <div class="field"><label>Ден от месеца</label><select id="sDom"></select></div>
+        <div class="field"><label>От дата</label><input id="sFrom" type="date"></div>
+        <div class="field"><label>До дата</label><input id="sTo" type="date"></div>
+      </div>
+      <div class="tablewrap" id="sTable"></div>
+      <div class="chart short"><canvas id="cStrat"></canvas></div>
+      <details><summary>Как работят стратегиите</summary>
+        <ul class="small muted">
+          <li><b>Обикновен DCA</b>: една и съща сума всеки месец.</li>
+          <li><b>Fear &amp; Greed</b>: ×2 при страх под 25, ×1.5 под 45, ×1 под 55, ×0.5 под 75, ×0.25 при алчност. Преди 2018 г. няма данни, затова ×1.</li>
+          <li><b>По сигнала</b>: ×3 при сигнал под 20, ×2 под 40, ×1 под 60, ×0.5 под 80, нищо над 80.</li>
+          <li><b>Само мечи пазар</b>: ×2, но само когато BTC е под 200-дневната средна.</li>
+          <li><b>Купи дъното (идеал)</b>: само за сравнение. Всичко е вложено на най-ниската цена в периода, което е невъзможно на практика.</li>
+        </ul>
+      </details>
+    </div>
+
+    <!-- Cycles -->
+    <div class="card calc" id="c-cycles" hidden>
+      <h2>Статистика на циклите</h2>
+      <p class="hint">Връх и дъно на всеки 4-годишен цикъл (цикълът започва от халвинга).</p>
+      <div class="tablewrap" id="cyTable"></div>
+      <h3>Ако текущият цикъл повтори някой от предишните</h3>
+      <div class="tablewrap" id="cyProj"></div>
+      <p class="small muted">Прогнозата прилага спада от върха и продължителността на всеки предишен цикъл към текущия връх. Това е сценарий, не прогноза.</p>
+    </div>
+  </section>
+
+  <!-- ================= ПОРТФОЛИО ================= -->
+  <section class="view" id="v-portfolio">
+    <div class="card">
+      <div class="small muted">Общо портфолио</div>
+      <div class="total" id="pTotal">—</div>
+      <div class="row" style="margin-top:4px"><span class="sub" id="pTotal2">—</span><span class="chip" id="pTotalPnl">—</span></div>
+      <div class="stats" style="margin-top:14px" id="pStats"></div>
+      <div class="chart short"><canvas id="cPortHist"></canvas></div>
+      <p class="small muted" id="pHistHint"></p>
+    </div>
+
+    <div class="pos">
+      <div class="card" id="posBTC"></div>
+      <div class="card" id="posMSTR"></div>
+    </div>
+    <p class="disclaimer">Данните за портфолиото се пазят само на това устройство. Не се изпращат никъде. Направи си резервно копие от ⚙️ Настройки.</p>
+  </section>
+
+  <!-- ================= НОВИНИ ================= -->
+  <section class="view" id="v-news">
+    <div class="row between" style="margin-bottom:12px">
+      <h2 style="margin:0;font-size:18px">Новини · Bitcoin Magazine</h2>
+      <span class="small muted" id="newsUpd"></span>
+    </div>
+    <div class="news" id="newsList"><div class="loading">Зареждане…</div></div>
+  </section>
+</main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-tab="market" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Пазар</button>
+  <button data-tab="charts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-6"/></svg>Графики</button>
+  <button data-tab="calc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h.01M16 19h.01"/></svg>Калкулатори</button>
+  <button data-tab="portfolio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H5a2 2 0 0 1 0-4h13v4"/><path d="M3 5v14a2 2 0 0 0 2 2h15V7"/><circle cx="16" cy="14" r="1.5"/></svg>Портфолио</button>
+  <button data-tab="news"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/></svg>Новини</button>
+</nav>
+
+<dialog id="settings">
+  <div class="dhead"><b>Настройки</b><button class="iconbtn" id="closeSettings" aria-label="Затвори">✕</button></div>
+  <div class="dbody">
+    <h3>Finnhub ключ (MSTR в реално време)</h3>
+    <p class="small muted" style="margin-top:0">Безплатен ключ от <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io/register</a>. Копирай „API Key“ от таблото и го постави тук. Пази се само на това устройство.</p>
+    <div class="row"><div class="field" style="flex:1"><input id="setKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="напр. d1abc..."></div><button class="btn sm" id="saveKey">Запази</button></div>
+    <div class="small muted" id="keyStatus" style="margin-top:6px"></div>
+
+    <h3>Strategy (MSTR): брой биткойни</h3>
+    <div class="row"><div class="field" style="flex:1"><input id="setHold" type="number" min="0"></div><button class="btn sm ghost" id="saveHold">Запази</button></div>
+    <p class="small muted">Използва се за mNAV и BTC на акция. Актуалната стойност е на strategy.com.</p>
+
+    <h3>Аларми</h3>
+    <div class="row">
+      <div class="field" style="flex:2"><select id="alType">
+        <option value="btc_above">BTC над ($)</option><option value="btc_below">BTC под ($)</option>
+        <option value="mstr_above">MSTR над ($)</option><option value="mstr_below">MSTR под ($)</option>
+        <option value="fng_below">Fear &amp; Greed под</option><option value="score_below">Сигнал под</option><option value="score_above">Сигнал над</option>
+      </select></div>
+      <div class="field" style="flex:1"><input id="alVal" type="number" inputmode="decimal" placeholder="стойност"></div>
+      <button class="btn sm" id="addAlert">Добави</button>
+    </div>
+    <div id="alertList"></div>
+    <button class="btn sm ghost" id="notifPerm" style="margin-top:10px">Разреши известия</button>
+    <p class="small muted">Алармите се проверяват, докато приложението е отворено.</p>
+
+    <h3>Резервно копие</h3>
+    <div class="row">
+      <button class="btn sm ghost" id="exportBtn">Експорт (файл)</button>
+      <label class="btn sm ghost" style="display:inline-block">Импорт<input type="file" id="importFile" accept="application/json" hidden></label>
+      <button class="btn sm danger" id="resetBtn">Изтрий всички мои данни</button>
+    </div>
+
+    <h3>Инсталиране на iPhone</h3>
+    <p class="small muted" style="margin:0">Отвори линка в Safari → бутон „Сподели“ → „Добави към началния екран“.</p>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

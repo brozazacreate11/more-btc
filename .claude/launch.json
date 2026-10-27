@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "more-btc",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$r=(Resolve-Path '.').Path; $l=New-Object Net.HttpListener; $l.Prefixes.Add('http://localhost:8787/'); $l.Start(); $t=@{'.html'='text/html; charset=utf-8';'.js'='text/javascript; charset=utf-8';'.css'='text/css; charset=utf-8';'.json'='application/json; charset=utf-8';'.svg'='image/svg+xml';'.png'='image/png';'.webmanifest'='application/manifest+json'}; Write-Host 'Serving on http://localhost:8787'; while($l.IsListening){ $c=$l.GetContext(); $p=[Uri]::UnescapeDataString($c.Request.Url.AbsolutePath); if($p -eq '/'){$p='/index.html'}; $f=[IO.Path]::GetFullPath((Join-Path $r $p.TrimStart('/'))); if($f.StartsWith($r) -and (Test-Path -LiteralPath $f -PathType Leaf)){ $b=[IO.File]::ReadAllBytes($f); $c.Response.ContentType=$t[[IO.Path]::GetExtension($f)]; $c.Response.Headers.Add('Cache-Control','no-store'); $c.Response.OutputStream.Write($b,0,$b.Length) } else { $c.Response.StatusCode=404 }; $c.Response.Close() }"
+      ],
+      "port": 8787
+    }
+  ]
+}
