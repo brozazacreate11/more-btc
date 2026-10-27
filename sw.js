@@ -1,6 +1,7 @@
 // Service worker: приложението работи и офлайн с последните заредени данни.
 // Стратегия: първо мрежата (винаги най-новата версия), кешът е резерва.
-const CACHE = 'morebtc-v3';
+// При всяка промяна в приложението вдигни номера (същият е APP_VERSION в app.js).
+const CACHE = 'morebtc-v4';
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', CDN];
 
@@ -22,8 +23,9 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin !== location.origin) return; // външните API-та винаги на живо
+  // cache: 'no-cache' = винаги питай сървъра дали има нова версия (GitHub Pages иначе държи файловете 10 мин.)
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' })
       .then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
         return res;

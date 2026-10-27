@@ -1,5 +1,6 @@
 'use strict';
 /* More BTC: всичко работи в браузъра. Личните данни са само в localStorage на устройството. */
+const APP_VERSION = '4'; // същият номер като CACHE в sw.js
 
 // ============================================================ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -1064,5 +1065,16 @@ async function doInstall() {
 $('#installBtn').onclick = doInstall;
 $('#installBtn2').onclick = doInstall;
 
+$('#appVersion').textContent = `More BTC · версия ${APP_VERSION}`;
 boot();
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  // нова версия на сайта → новият service worker поема страницата → презареждаме веднъж, за да се види веднага
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').catch(() => { });
+  // iPhone връща приложението от фона без презареждане: тогава проверяваме ръчно за нова версия
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => { });
+  });
+}
