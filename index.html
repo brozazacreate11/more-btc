@@ -194,6 +194,8 @@
   <section class="view" id="v-calc">
     <div class="subnav" id="calcNav">
       <button data-c="dca" class="on" data-i18n="cn.dca">DCA калкулатор</button>
+      <button data-c="proj" data-i18n="cn.proj">BTC прогноза</button>
+      <button data-c="ci" data-i18n="cn.ci">Сложна лихва</button>
       <button data-c="day" data-i18n="cn.day">Най-добър ден</button>
       <button data-c="months" data-i18n="cn.months">Плюс/минус месеци</button>
       <button data-c="strat" data-i18n="cn.strat">Стратегии</button>
@@ -223,6 +225,52 @@
       <div class="chart"><canvas id="cDca"></canvas></div>
       <div class="chart short"><canvas id="cDcaAvg"></canvas></div>
       <details><summary data-i18n="allBuys">Всички покупки</summary><div class="tablewrap" id="dTable"></div></details>
+    </div>
+
+    <!-- BTC прогноза: сценарии -->
+    <div class="card calc" id="c-proj" hidden>
+      <h2 data-i18n="pj.title">Колко BTC и пари ще натрупам? Сценарии</h2>
+      <p class="hint" data-i18n="pj.hint"></p>
+      <div class="form">
+        <div class="field"><label data-i18n="pj.initial">Начална сума</label><input id="pjInit" type="text" inputmode="decimal" autocomplete="off"></div>
+        <div class="field"><label data-i18n="pj.monthly">Месечна вноска</label><input id="pjMon" type="text" inputmode="decimal" autocomplete="off"></div>
+        <div class="field"><label data-i18n="f.cur">Валута</label><select id="pjCur"><option>EUR</option><option>USD</option></select></div>
+        <div class="field"><label data-i18n="pj.years">Години</label><input id="pjYears" type="text" inputmode="numeric" autocomplete="off"></div>
+      </div>
+      <h3 data-i18n="pj.scen">Сценарии (средна доходност на година)</h3>
+      <div id="pjScen"></div>
+      <button class="btn sm ghost" id="pjAdd" data-i18n="pj.add">+ Добави сценарий</button>
+      <p class="small muted" id="pjRef" style="margin:12px 0 0"></p>
+      <div class="stats" id="pjRes" style="margin-top:14px"></div>
+      <div class="chart"><canvas id="cProj"></canvas></div>
+      <div class="tablewrap" id="pjTable"></div>
+      <p class="small muted" data-i18n="pj.note"></p>
+    </div>
+
+    <!-- Сложна лихва -->
+    <div class="card calc" id="c-ci" hidden>
+      <h2 data-i18n="ci.title">Калкулатор за сложна лихва (DCA)</h2>
+      <p class="hint" data-i18n="ci.hint"></p>
+      <div class="form">
+        <div class="field"><label data-i18n="pj.initial">Начална сума</label><input id="ciInit" type="text" inputmode="decimal" autocomplete="off"></div>
+        <div class="field"><label data-i18n="ci.contrib">Вноска</label><input id="ciContrib" type="text" inputmode="decimal" autocomplete="off"></div>
+        <div class="field"><label data-i18n="ci.freq">Колко често</label><select id="ciFreq">
+          <option value="none" data-i18n="fr.none"></option><option value="day" data-i18n="fr.day"></option><option value="week" data-i18n="fr.week"></option><option value="month" data-i18n="fr.month"></option><option value="year" data-i18n="fr.year"></option>
+        </select></div>
+        <div class="field"><label data-i18n="ci.rate">Доходност %</label><input id="ciRate" type="text" inputmode="decimal" autocomplete="off"></div>
+        <div class="field"><label data-i18n="ci.per">За период</label><select id="ciPer">
+          <option value="day" data-i18n="per.day"></option><option value="month" data-i18n="per.month"></option><option value="year" data-i18n="per.year"></option>
+        </select></div>
+        <div class="field"><label data-i18n="ci.dur">Срок</label><input id="ciDur" type="text" inputmode="decimal" autocomplete="off"></div>
+        <div class="field"><label data-i18n="ci.unit">Единица</label><select id="ciUnit">
+          <option value="days" data-i18n="u.days"></option><option value="months" data-i18n="u.months"></option><option value="years" data-i18n="u.years"></option>
+        </select></div>
+        <div class="field"><label data-i18n="f.cur">Валута</label><select id="ciCur"><option>EUR</option><option>USD</option></select></div>
+      </div>
+      <div class="stats" id="ciRes"></div>
+      <div class="chart"><canvas id="cCi"></canvas></div>
+      <div class="tablewrap" id="ciTable"></div>
+      <p class="small muted" data-i18n="ci.note"></p>
     </div>
 
     <!-- Best day -->

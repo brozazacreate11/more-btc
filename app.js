@@ -1,6 +1,6 @@
 'use strict';
 /* More BTC: всичко работи в браузъра. Личните данни са само в localStorage на устройството. */
-const APP_VERSION = '7'; // същият номер като CACHE в sw.js
+const APP_VERSION = '8'; // същият номер като CACHE в sw.js
 
 // ============================================================ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -50,6 +50,7 @@ const fmtShort = (v, cur = 'USD') => {
   return cur === 'EUR' ? (LANG === 'en' ? '€' + s : s + ' €') : cur === 'USD' ? '$' + s : s;
 };
 const cls = (el, n) => { el.classList.remove('up', 'down'); if (n != null && isFinite(n)) el.classList.add(n >= 0 ? 'up' : 'down'); };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); // за текст, въведен от потребителя
 
 const LS = {
   get(k, d) { try { const v = localStorage.getItem('morebtc.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -848,7 +849,113 @@ function calcCycles() {
   $('#cyProj').innerHTML = `<table><tr><th>${tr('th.scenario')}</th><th>${tr('th.dropFromTop')}</th><th>${tr('th.botPrice')}</th><th>${tr('th.botDate')}</th><th>${tr('th.when')}</th><th>${tr('th.vsToday')}</th></tr>${proj}</table>`;
 }
 
-const calcs = { dca: calcDca, day: calcBestDay, months: calcMonths, strat: calcStrat, cycles: calcCycles };
+// ============================================================ BTC прогноза: сценарии за бъдещето
+const PJ_COLORS = ['#ef4444', '#eab308', '#22c55e', '#3b82f6', '#a855f7'];
+const pj = Object.assign({ initial: 1000, monthly: 100, cur: 'EUR', years: 20, scen: [{ n: '', r: 10, d: 0 }, { n: '', r: 15, d: 1 }, { n: '', r: 30, d: 2 }] }, LS.get('proj', {}));
+const savePj = () => LS.set('proj', pj);
+// d = пореден номер на сценария; дава името по подразбиране и цвета, които не се местят при изтриване
+const pjName = s => s.n || (s.d < 3 ? tr('pj.s' + s.d) : tr('pj.sN', { n: s.d + 1 }));
+const pjColor = s => PJ_COLORS[s.d % PJ_COLORS.length];
+// месец по месец: цената на BTC расте равномерно с r% на година; в края на всеки месец купуваш за вноската
+function projectScenario(r, years, initial, monthly, p0) {
+  const m = Math.pow(1 + r / 100, 1 / 12) - 1;
+  let value = initial, invested = initial, btc = initial / p0, price = p0;
+  const pts = [{ y: 0, value, invested, btc, price }];
+  for (let k = 1; k <= years * 12; k++) {
+    price *= 1 + m; value = value * (1 + m) + monthly; invested += monthly; btc += monthly / price;
+    if (k % 12 === 0) pts.push({ y: k / 12, value, invested, btc, price });
+  }
+  return pts;
+}
+function renderPjEditor() {
+  $('#pjScen').innerHTML = pj.scen.map((s, k) => `<div class="pj-row"><i style="background:${pjColor(s)}"></i>
+    <input data-k="${k}" data-f="n" value="${esc(s.n)}" placeholder="${esc(pjName({ d: s.d }))}" autocomplete="off">
+    <div class="pct"><input data-k="${k}" data-f="r" type="text" inputmode="decimal" autocomplete="off" value="${fmtIn(s.r) || '0'}"><span>%</span></div>
+    <button class="iconbtn" data-del="${k}" ${pj.scen.length <= 1 ? 'disabled' : ''} aria-label="✕">✕</button></div>`).join('');
+  $('#pjAdd').hidden = pj.scen.length >= 5;
+}
+function calcProj(full = true) {
+  pj.initial = Math.max(0, num($('#pjInit').value) || 0);
+  pj.monthly = Math.max(0, num($('#pjMon').value) || 0);
+  pj.cur = $('#pjCur').value;
+  pj.years = clamp(Math.round(num($('#pjYears').value) || 20), 1, 50);
+  savePj();
+  if (full) renderPjEditor();
+  const cur = pj.cur, Y = pj.years, p0 = livePrice('BTC', cur);
+  const big = v => Math.abs(v) >= 1e7 ? fmtShort(v, cur) : money(v, cur, 0);
+  const res = pj.scen.map(s => ({ s, pts: projectScenario(clamp(s.r, -99, 1000), Y, pj.initial, pj.monthly, p0) }));
+  const inv = pj.initial + pj.monthly * 12 * Y;
+  $('#pjRes').innerHTML = res.map(({ s, pts }) => { const f = pts[Y];
+    return `<div class="stat"><div class="k"><span style="color:${pjColor(s)}">●</span> ${esc(pjName(s))} · ${pct(s.r, 0)}</div><div class="v">${big(f.value)}</div><div class="s">${tr('pj.mult', { m: nf(f.invested ? f.value / f.invested : 0, 1) })} · ${fmtBtc(f.btc)} BTC</div></div>`;
+  }).join('') + statBox(tr('l.invested'), big(inv), tr('pj.after', { y: Y }));
+  // за сравнение: средногодишен ръст на BTC за последните 4, 8, 12 години (цели цикли)
+  const nowP = B.p[B.p.length - 1], cagr = n => { const i = B.p.length - 1 - Math.round(n * 365.25); return i > 0 ? (Math.pow(nowP / B.p[i], 1 / n) - 1) * 100 : null; };
+  $('#pjRef').textContent = tr('pj.ref', { a: [4, 8, 12].map(n => tr('pj.refY', { y: n, p: pct(cagr(n), 0) })).join(' · ') });
+  // таблица по години
+  const ys = [1, 5, 10, 15, 20, 25, 30, 40, 50].filter(y => y < Y).concat(Y);
+  $('#pjTable').innerHTML = `<table><tr><th>${tr('th.year')}</th><th>${tr('l.invested')}</th>${res.map(({ s }) => `<th><span style="color:${pjColor(s)}">●</span> ${esc(pjName(s))}</th>`).join('')}</tr>${ys.map(y => `<tr><td>${tr('pj.after', { y })}</td><td>${big(pj.initial + pj.monthly * 12 * y)}</td>${res.map(({ pts }) => `<td><b>${big(pts[y].value)}</b><br><span class="muted small">${fmtBtc(pts[y].btc)} BTC · ${tr('pj.btcAt', { p: fmtShort(pts[y].price, cur) })}</span></td>`).join('')}</tr>`).join('')}</table>`;
+  // графика
+  const o = opts({ yFmt: v => fmtShort(v, cur), labelFmt: v => money(v, cur, 0), legend: true });
+  o.scales.x = { type: 'linear', bounds: 'data', grid: { display: false }, ticks: { callback: v => tr('yShort', { n: v }), maxTicksLimit: 8 } };
+  o.plugins.tooltip.callbacks.title = it => it.length ? tr('pj.after', { y: it[0].parsed.x }) : '';
+  o.plugins.decimation.enabled = false;
+  mk('cProj', { type: 'line', data: { datasets: [
+    ...res.map(({ s, pts }) => ({ label: pjName(s), data: pts.map(p => ({ x: p.y, y: p.value })), borderColor: pjColor(s), borderWidth: 2, pointRadius: 0 })),
+    { label: tr('l.invested'), data: res[0] ? res[0].pts.map(p => ({ x: p.y, y: p.invested })) : [], borderColor: '#9ca3af', borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0 },
+  ] }, options: o });
+}
+
+// ============================================================ сложна лихва (общ калкулатор, не само за BTC)
+const ci = Object.assign({ initial: 1000, contrib: 100, freq: 'month', rate: 10, per: 'year', dur: 20, unit: 'years', cur: 'EUR' }, LS.get('ci', {}));
+const CI_DAYS = { day: 1, week: 7, month: 30.4375, year: 365.25, days: 1, months: 30.4375, years: 365.25 };
+// ден по ден: салдото расте с доходността, превърната в дневен множител; вноските се добавят в края на всеки период
+function simCompound(c) {
+  const unitDays = CI_DAYS[c.unit], totalDays = Math.max(1, Math.round(c.dur * unitDays));
+  const f = Math.pow(1 + c.rate / 100, 1 / CI_DAYS[c.per]);
+  const step = c.freq === 'none' ? Infinity : CI_DAYS[c.freq];
+  const rowStep = Math.max(1, Math.ceil(c.dur / 60)); // най-много ~60 реда в таблицата
+  const sampleEvery = totalDays <= 120 ? 1 : totalDays <= 1100 ? 7 : 30.4375;
+  let bal = c.initial, inv = c.initial, nextC = step, nextS = sampleEvery, nextR = 1;
+  const pts = [{ x: 0, v: bal, i: inv }], rows = [];
+  for (let d = 1; d <= totalDays; d++) {
+    bal *= f;
+    while (d >= Math.round(nextC)) { bal += c.contrib; inv += c.contrib; nextC += step; } // закръглено като редовете: 12-ата вноска влиза в „Година 1“
+    if (d >= nextS - 1e-9 || d === totalDays) { pts.push({ x: d / unitDays, v: bal, i: inv }); while (nextS <= d + 1e-9) nextS += sampleEvery; }
+    while (nextR <= c.dur && d >= Math.round(nextR * unitDays)) { rows.push({ n: nextR, v: bal, i: inv }); nextR += rowStep; }
+  }
+  if (!rows.length || rows[rows.length - 1].n !== c.dur) rows.push({ n: +c.dur.toFixed(2), v: bal, i: inv });
+  return { bal, inv, pts, rows, eff: (Math.pow(f, 365.25) - 1) * 100 };
+}
+function calcCi() {
+  ci.initial = Math.max(0, num($('#ciInit').value) || 0);
+  ci.contrib = Math.max(0, num($('#ciContrib').value) || 0);
+  ci.freq = $('#ciFreq').value; ci.per = $('#ciPer').value; ci.unit = $('#ciUnit').value; ci.cur = $('#ciCur').value;
+  const r = num($('#ciRate').value); ci.rate = isFinite(r) ? clamp(r, -99, 1000) : 0;
+  ci.dur = clamp(num($('#ciDur').value) || 1, 1, ci.unit === 'days' ? 20000 : ci.unit === 'months' ? 600 : 50);
+  LS.set('ci', ci);
+  const s = simCompound(ci), cur = ci.cur;
+  const big = v => Math.abs(v) >= 1e9 ? fmtShort(v, cur) : money(v, cur, Math.abs(v) >= 1000 ? 0 : 2);
+  const gain = s.bal - s.inv;
+  $('#ciRes').innerHTML = [
+    statBox(tr('ci.final'), big(s.bal), tr('ci.mult', { m: nf(s.inv ? s.bal / s.inv : 0, 2) })),
+    statBox(tr('l.invested'), big(s.inv), ''),
+    statBox(tr('ci.interest'), big(gain), '', gain >= 0 ? 'up' : 'down'),
+    statBox(tr('ci.eff'), pct(s.eff, 2), ''),
+  ].join('');
+  const rowName = n => tr({ days: 'dayCap', months: 'ci.monthN', years: 'ci.yearN' }[ci.unit], { n: nf(n, n % 1 ? 2 : 0) });
+  $('#ciTable').innerHTML = `<table><tr><th>${tr('ci.period')}</th><th>${tr('l.invested')}</th><th>${tr('ci.interest')}</th><th>${tr('ci.final')}</th></tr>${s.rows.map(x => `<tr><td>${rowName(x.n)}</td><td>${big(x.i)}</td><td class="${x.v - x.i >= 0 ? 'up' : 'down'}">${big(x.v - x.i)}</td><td><b>${big(x.v)}</b></td></tr>`).join('')}</table>`;
+  const unitShort = { days: 'dShort', months: 'mShort', years: 'yShortU' }[ci.unit];
+  const o = opts({ y: { type: 'linear' }, yFmt: v => fmtShort(v, cur), labelFmt: v => money(v, cur, 0), legend: true });
+  o.scales.x = { type: 'linear', bounds: 'data', grid: { display: false }, ticks: { callback: v => nf(v, v % 1 ? 1 : 0) + tr(unitShort), maxTicksLimit: 8 } };
+  o.plugins.tooltip.callbacks.title = it => it.length ? rowName(it[0].parsed.x) : '';
+  o.plugins.decimation.enabled = false;
+  mk('cCi', { type: 'line', data: { datasets: [
+    { label: tr('ci.final'), data: s.pts.map(p => ({ x: p.x, y: p.v })), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.12)', fill: true, borderWidth: 2, pointRadius: 0 },
+    { label: tr('l.invested'), data: s.pts.map(p => ({ x: p.x, y: p.i })), borderColor: '#9ca3af', borderWidth: 1.5, pointRadius: 0 },
+  ] }, options: o });
+}
+
+const calcs = { dca: calcDca, proj: calcProj, ci: calcCi, day: calcBestDay, months: calcMonths, strat: calcStrat, cycles: calcCycles };
 let curCalc = LS.get('calc', 'dca');
 function showCalc(c) {
   curCalc = c; LS.set('calc', c);
@@ -1129,6 +1236,32 @@ function wire() {
   $('#dAmt').addEventListener('input', calcDca);
   for (const id of ['bAsset', 'bFrom', 'bTo', 'bFilter']) $('#' + id).addEventListener('change', calcBestDay);
   for (const id of ['sAmt', 'sCur', 'sDom', 'sFrom', 'sTo']) $('#' + id).addEventListener('change', calcStrat);
+
+  // BTC прогноза: полетата се пресмятат при всяко натискане; редовете със сценарии се рисуват наново само при добавяне/изтриване
+  $('#pjInit').value = fmtIn(pj.initial) || '0'; $('#pjMon').value = fmtIn(pj.monthly) || '0'; $('#pjCur').value = pj.cur; $('#pjYears').value = pj.years;
+  for (const id of ['pjInit', 'pjMon', 'pjYears']) $('#' + id).addEventListener('input', () => calcProj(false));
+  $('#pjCur').addEventListener('change', () => calcProj(false));
+  $('#pjScen').addEventListener('input', e => {
+    const k = +e.target.dataset.k, s = pj.scen[k]; if (!s) return;
+    if (e.target.dataset.f === 'n') s.n = e.target.value.trim();
+    else { const v = num(e.target.value); if (!isFinite(v)) return; s.r = v; }
+    calcProj(false);
+  });
+  $('#pjScen').addEventListener('click', e => {
+    const b = e.target.closest('[data-del]'); if (!b || pj.scen.length <= 1) return;
+    pj.scen.splice(+b.dataset.del, 1); calcProj();
+  });
+  $('#pjAdd').onclick = () => {
+    if (pj.scen.length >= 5) return;
+    const last = pj.scen[pj.scen.length - 1];
+    pj.scen.push({ n: '', r: last ? last.r + 10 : 20, d: Math.max(-1, ...pj.scen.map(s => s.d)) + 1 }); calcProj();
+  };
+
+  // сложна лихва
+  $('#ciInit').value = fmtIn(ci.initial) || '0'; $('#ciContrib').value = fmtIn(ci.contrib) || '0'; $('#ciRate').value = fmtIn(ci.rate) || '0';
+  $('#ciDur').value = fmtIn(ci.dur) || '1'; $('#ciFreq').value = ci.freq; $('#ciPer').value = ci.per; $('#ciUnit').value = ci.unit; $('#ciCur').value = ci.cur;
+  for (const id of ['ciInit', 'ciContrib', 'ciRate', 'ciDur']) $('#' + id).addEventListener('input', calcCi);
+  for (const id of ['ciFreq', 'ciPer', 'ciUnit', 'ciCur']) $('#' + id).addEventListener('change', calcCi);
   wireSettings();
 }
 

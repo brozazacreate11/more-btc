@@ -138,6 +138,16 @@ main { max-width: 1120px; margin: 0 auto; padding: 14px 16px; }
 .btn.danger { background: rgba(239,68,68,.15); color: var(--down); border: 1px solid rgba(239,68,68,.35); }
 .btn.sm { padding: 7px 11px; font-size: 13px; }
 
+/* редове със сценарии (BTC прогноза): ● име | % | ✕ */
+.pj-row { display: grid; grid-template-columns: 12px 1fr 92px 36px; gap: 8px; align-items: center; margin-bottom: 8px; }
+.pj-row i { width: 12px; height: 12px; border-radius: 50%; }
+.pj-row input { width: 100%; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; font-size: 16px; min-height: 40px; }
+.pj-row input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.pj-row .pct { position: relative; }
+.pj-row .pct input { padding-right: 26px; text-align: right; }
+.pj-row .pct span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.pj-row .iconbtn:disabled { opacity: .3; cursor: default; }
+
 .chart { position: relative; height: 300px; margin-top: 12px; }
 .chart.tall { height: 380px; }
 .chart.short { height: 180px; }
