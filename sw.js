@@ -1,6 +1,6 @@
 // Service worker: приложението работи и офлайн с последните заредени данни.
 // Стратегия: първо мрежата (винаги най-новата версия), кешът е резерва.
-const CACHE = 'morebtc-v2';
+const CACHE = 'morebtc-v3';
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', CDN];
 

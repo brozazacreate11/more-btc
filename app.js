@@ -1050,5 +1050,19 @@ function posFormLight() {
   }
 }
 
+// Android / Chrome: собствен бутон за инсталиране (iPhone няма такова събитие, там е „Добави към началния екран“)
+let installEvt = null;
+const showInstall = on => { $('#installBtn').hidden = !on; $('#installBtn2').hidden = !on; };
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; showInstall(true); });
+window.addEventListener('appinstalled', () => { installEvt = null; showInstall(false); toast('Приложението е инсталирано ✓'); });
+async function doInstall() {
+  if (!installEvt) return toast('Меню ⋮ → „Инсталиране на приложението“', 4000);
+  installEvt.prompt();
+  await installEvt.userChoice.catch(() => { });
+  installEvt = null; showInstall(false);
+}
+$('#installBtn').onclick = doInstall;
+$('#installBtn2').onclick = doInstall;
+
 boot();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
