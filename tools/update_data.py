@@ -52,8 +52,14 @@ def btc():
         for v in json.loads(get("https://api.blockchain.info/charts/market-price?timespan=all&format=json&sampled=false"))["values"]:
             if v["y"] > 0:
                 s[day(v["x"])] = v["y"]
-    for k in json.loads(get("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1000")):
-        s[day(k[0] / 1000)] = float(k[4])
+    # последните дни: Coinbase работи от сървърите на GitHub (САЩ); Binance там връща HTTP 451, затова е само резерва
+    try:
+        for c in json.loads(get("https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=86400")):
+            s[day(c[0])] = float(c[4])  # [време, low, high, open, close, обем]
+    except Exception as e:
+        print(f"coinbase FAILED: {e}", file=sys.stderr)
+        for k in json.loads(get("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=1000")):
+            s[day(k[0] / 1000)] = float(k[4])
     save("btc.json", s)
 
 
