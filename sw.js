@@ -1,9 +1,9 @@
 // Service worker: приложението работи и офлайн с последните заредени данни.
 // Стратегия: първо мрежата (винаги най-новата версия), кешът е резерва.
 // При всяка промяна в приложението вдигни номера (същият е APP_VERSION в app.js).
-const CACHE = 'morebtc-v4';
+const CACHE = 'morebtc-v5';
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
-const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', CDN];
+const SHELL = ['./', 'index.html', 'app.css', 'i18n.js', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', CDN];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
