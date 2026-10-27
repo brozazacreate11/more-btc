@@ -1,6 +1,6 @@
 'use strict';
 /* More BTC: всичко работи в браузъра. Личните данни са само в localStorage на устройството. */
-const APP_VERSION = '6'; // същият номер като CACHE в sw.js
+const APP_VERSION = '7'; // същият номер като CACHE в sw.js
 
 // ============================================================ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -56,7 +56,9 @@ const LS = {
   set(k, v) { try { localStorage.setItem('morebtc.' + k, JSON.stringify(v)); } catch { } },
   del(k) { try { localStorage.removeItem('morebtc.' + k); } catch { } },
 };
-const settings = Object.assign({ key: '', holdings: 848000, scale: 'log', lang: LANG }, LS.get('settings', {}));
+const settings = Object.assign({ key: '', holdMSTR: null, holdASST: null, scale: 'log', lang: LANG }, LS.get('settings', {}));
+// старо поле „holdings“ (MSTR, по подразбиране 848000): различно число значи, че е въведено ръчно
+if ('holdings' in settings) { if (settings.holdings && settings.holdings !== 848000) settings.holdMSTR = settings.holdings; delete settings.holdings; }
 const saveSettings = () => LS.set('settings', settings);
 
 function toast(msg, ms = 2600) {
@@ -245,9 +247,23 @@ const scoreLabel = s => tr('sc.' + (s < 20 ? 0 : s < 40 ? 1 : s < 60 ? 2 : s < 8
 const scoreColor = s => `hsl(${Math.round(220 - clamp(s) * 2.2)}, 85%, 55%)`;
 
 // ============================================================ live prices
-const Live = { btcUsd: null, btcEur: null, openUsd: null, openEur: null, fx: null, mstr: null, mstrPc: null, asst: null, asstPc: null, gold: null, goldOpen: null, mcap: null, shares: null, lastBtc: 0, lastMstr: 0, lastAsst: 0, lastGold: 0, height: null };
+const Live = { btcUsd: null, btcEur: null, openUsd: null, openEur: null, fx: null, mstr: null, mstrPc: null, asst: null, asstPc: null, gold: null, goldOpen: null, mcap: null, shares: null, sharesASST: null, lastBtc: 0, lastMstr: 0, lastAsst: 0, lastGold: 0, height: null };
 // злато в USD за тройунция: наживо от Coinbase (PAXG, токен = 1 унция злато), иначе последното дневно затваряне
 const goldNow = () => Live.gold ?? G.p[G.p.length - 1] ?? null;
+
+// Биткойн резерви на компаниите: ръчно число от настройките, иначе CoinGecko (кеш 6 ч.), иначе последното известно
+const TREASURY_DEFAULT = { MSTR: 848517, ASST: 43000 };
+let treasury = LS.get('treasury', { t: 0 });
+const holdingsOf = s => settings['hold' + s] || treasury[s] || TREASURY_DEFAULT[s];
+async function loadTreasury() {
+  if (Date.now() - treasury.t < 6 * 3600e3) return;
+  try {
+    const j = await getJSON('https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin');
+    const find = sym => (j.companies.find(c => c.symbol === sym + '.US') || {}).total_holdings || null;
+    treasury = { t: Date.now(), MSTR: find('MSTR') || treasury.MSTR, ASST: find('ASST') || treasury.ASST };
+    LS.set('treasury', treasury); dirty = true;
+  } catch { }
+}
 let dirty = true, cbWs = null, fhWs = null;
 
 function connectCoinbase() {
@@ -308,6 +324,10 @@ async function pollMstr() { // MSTR и ASST
       const pr = await getJSON(`https://finnhub.io/api/v1/stock/profile2?symbol=MSTR&token=${encodeURIComponent(settings.key)}`);
       Live.shares = pr.shareOutstanding ? pr.shareOutstanding * 1e6 : null; Live.mcap = pr.marketCapitalization ? pr.marketCapitalization * 1e6 : null;
     }
+    if (!Live.sharesASST) { // брой акции на Strive за mNAV и BTC на акция
+      const pa = await getJSON(`https://finnhub.io/api/v1/stock/profile2?symbol=ASST&token=${encodeURIComponent(settings.key)}`);
+      Live.sharesASST = pa.shareOutstanding ? pa.shareOutstanding * 1e6 : null;
+    }
     $('#keyStatus').textContent = tr('key.ok');
   } catch { $('#keyStatus').textContent = tr('key.bad'); }
 }
@@ -341,13 +361,23 @@ function renderMarket() {
   $('#mstrUsd').textContent = money(mp, 'USD', 2);
   $('#mstrEur').textContent = money(mp / (Live.fx || fxAt(t)), 'EUR', 2);
   const mch = (mp / mpc - 1) * 100, mc = $('#mstrChg'); mc.textContent = pct(mch) + ' ' + tr('today'); mc.className = 'chip ' + (mch >= 0 ? 'up' : 'down');
-  const nav = settings.holdings * usd;
-  if (Live.shares) {
-    const mcap = Live.shares * mp;
-    $('#mnavTxt').textContent = nf(mcap / nav, 2);
-    $('#bpsTxt').textContent = tr('satsN', { n: nf(settings.holdings / Live.shares * 1e8, 0) });
-  } else { $('#mnavTxt').textContent = '—'; $('#bpsTxt').textContent = '—'; }
+  // mNAV = пазарна капитализация / стойност на биткойните; BTC на акция в сатоши
+  const treasuryStats = (price, shares, hold, ids) => {
+    $(ids[0]).textContent = shares ? nf(shares * price / (hold * usd), 2) : '—';
+    $(ids[1]).textContent = shares ? tr('satsN', { n: nf(hold / shares * 1e8, 0) }) : '—';
+    $(ids[2]).textContent = tr('treasury', { n: nf(hold) });
+  };
+  treasuryStats(mp, Live.shares, holdingsOf('MSTR'), ['#mnavTxt', '#bpsTxt', '#holdM']);
   $('#mstrNote').innerHTML = settings.key ? tr(Date.now() - Live.lastMstr < 120000 ? 'mstr.live' : 'mstr.closed') : tr('mstr.nokey');
+
+  // ASST (Strive)
+  const ap = Live.asst ?? A.p[A.p.length - 1], apc = Live.asstPc ?? A.p[A.p.length - 2];
+  if (ap) {
+    $('#asstUsd').textContent = money(ap, 'USD', 2);
+    $('#asstEur').textContent = money(ap / (Live.fx || fxAt(t)), 'EUR', 2);
+    const ach = (ap / apc - 1) * 100, ac = $('#asstChg'); ac.textContent = pct(ach) + ' ' + tr('today'); ac.className = 'chip ' + (ach >= 0 ? 'up' : 'down');
+    treasuryStats(ap, Live.sharesASST, holdingsOf('ASST'), ['#mnavA', '#bpsA', '#holdA']);
+  }
 
   // Злато
   const g = goldNow();
@@ -847,6 +877,7 @@ function livePrice(asset, cur) {
   return cur === 'EUR' ? u / fx : u;
 }
 const unitOf = a => a === 'BTC' ? 'BTC' : a === 'GOLD' ? tr('unit.g') : tr('unit.shares');
+const sharesOf = a => a === 'MSTR' ? Live.shares : a === 'ASST' ? Live.sharesASST : null; // брой акции (от Finnhub)
 // количество без излишни нули, като в Revolut: „14,41 ASST“
 const fmtQty = (a, q) => Number(q).toLocaleString(loc(), { minimumFractionDigits: 0, maximumFractionDigits: a === 'BTC' ? 8 : a === 'GOLD' ? 2 : 4 });
 const qtyLabel = a => a === 'GOLD' ? tr('unit.g') : a; // BTC, MSTR, ASST, гр.
@@ -870,7 +901,7 @@ function posForm(asset) {
     <div class="mid">${p.qty ? money(value, p.cur) : '—'}</div>
     <div class="sub">${p.qty ? posSub(asset) : tr('pf.enter')}</div>
     <div class="small muted pl" style="margin-top:2px">${p.qty ? posPl(asset) : ''}</div>
-    ${asset === 'MSTR' && p.qty && Live.shares ? `<div class="small muted" style="margin-top:4px">${tr('pf.exposure', { b: fmtBtc(p.qty * settings.holdings / Live.shares) })}</div>` : ''}
+    ${p.qty && sharesOf(asset) ? `<div class="small muted" style="margin-top:4px">${tr('pf.exposure', { b: fmtBtc(p.qty * holdingsOf(asset) / sharesOf(asset)), c: aName(asset) })}</div>` : ''}
     ${asset === 'GOLD' ? `<div class="small muted" style="margin-top:4px">${tr('gold.note', { p: money(price, p.cur, 2) })}</div>` : ''}
     <h3>${tr('pf.edit')}</h3>
     <div class="form" style="margin-bottom:8px">
@@ -980,7 +1011,7 @@ function renderAlerts() {
 }
 function checkAlerts() {
   const v = {
-    btc: Live.btcUsd, mstr: Live.mstr, fng: fngAt(today()) ?? FNGs.v[FNGs.v.length - 1], score: I.score ? I.score[I.score.length - 1] : null,
+    btc: Live.btcUsd, mstr: Live.mstr, asst: Live.asst, fng: fngAt(today()) ?? FNGs.v[FNGs.v.length - 1], score: I.score ? I.score[I.score.length - 1] : null,
   };
   let changed = false;
   for (const a of alerts) {
@@ -989,7 +1020,7 @@ function checkAlerts() {
     if (x == null) continue;
     if ((dir === 'above' && x >= a.value) || (dir === 'below' && x <= a.value)) {
       a.fired = true; changed = true;
-      const msg = `${alName(a.type)} ${nf(a.value, 0)}: ${tr('now')} ${k === 'btc' || k === 'mstr' ? money(x, 'USD') : nf(x, 0)}`;
+      const msg = `${alName(a.type)} ${nf(a.value, 0)}: ${tr('now')} ${['btc', 'mstr', 'asst'].includes(k) ? money(x, 'USD') : nf(x, 0)}`;
       toast('🔔 ' + msg, 6000); notify('More BTC', msg);
     }
   }
@@ -1005,15 +1036,22 @@ async function notify(title, body) {
 
 // ============================================================ settings
 function openSettings() {
-  $('#setKey').value = settings.key; $('#setHold').value = settings.holdings; renderAlerts();
+  $('#setKey').value = settings.key;
+  for (const s of ['MSTR', 'ASST']) { // празно = автоматично (CoinGecko); в placeholder е текущото автоматично число
+    const inp = $('#setHold' + s[0]); inp.value = settings['hold' + s] ? fmtIn(settings['hold' + s]) : ''; inp.placeholder = nf(treasury[s] || TREASURY_DEFAULT[s]);
+  }
+  renderAlerts();
   $('#settings').showModal();
 }
 function wireSettings() {
   $('#openSettings').onclick = openSettings;
   document.addEventListener('click', e => { if (e.target.closest('[data-open-settings]')) { e.preventDefault(); openSettings(); } });
   $('#closeSettings').onclick = () => $('#settings').close();
-  $('#saveKey').onclick = () => { settings.key = $('#setKey').value.trim(); saveSettings(); Live.mcap = Live.shares = null; Live.lastMstr = 0; $('#keyStatus').textContent = tr('key.checking'); connectFinnhub(); pollMstr(); };
-  $('#saveHold').onclick = () => { settings.holdings = num($('#setHold').value) || settings.holdings; saveSettings(); dirty = true; toast(tr('saved')); };
+  $('#saveKey').onclick = () => { settings.key = $('#setKey').value.trim(); saveSettings(); Live.mcap = Live.shares = Live.sharesASST = null; Live.lastMstr = 0; $('#keyStatus').textContent = tr('key.checking'); connectFinnhub(); pollMstr(); };
+  $('#saveHold').onclick = () => {
+    for (const s of ['MSTR', 'ASST']) { const v = num($('#setHold' + s[0]).value); settings['hold' + s] = v > 0 ? v : null; }
+    saveSettings(); dirty = true; toast(tr('saved'));
+  };
   $('#addAlert').onclick = () => { const v = num($('#alVal').value); if (!isFinite(v)) return toast(tr('e.enterVal')); alerts.push({ type: $('#alType').value, value: v, fired: false }); LS.set('alerts', alerts); $('#alVal').value = ''; renderAlerts(); };
   $('#alertList').onclick = e => {
     const d = e.target.dataset.del, r = e.target.dataset.rearm;
@@ -1100,7 +1138,7 @@ async function boot() {
   try { await loadData(); } catch (e) { $('#boot').textContent = tr('boot.err'); console.error(e); return; }
   computeIndicators();
   $('#boot').remove();
-  connectCoinbase(); connectFinnhub(); pollBtc(); pollMstr(); pollHeight();
+  connectCoinbase(); connectFinnhub(); pollBtc(); pollMstr(); pollHeight(); loadTreasury();
   renderMarket(); showTab(curTab);
 
   let lastFull = Date.now();
@@ -1118,7 +1156,7 @@ async function boot() {
   }, 1000);
   setInterval(pollBtc, 5000);
   setInterval(pollMstr, 60000);
-  setInterval(pollHeight, 300000);
+  setInterval(() => { pollHeight(); loadTreasury(); }, 300000);
   setInterval(snapshotPortfolio, 600000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;

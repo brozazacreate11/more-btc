@@ -76,7 +76,10 @@ main { max-width: 1120px; margin: 0 auto; padding: 14px 16px; }
 
 /* ---------- Hero prices ---------- */
 .hero { display: grid; gap: 14px; grid-template-columns: 1fr; }
-@media (min-width: 760px) { .hero { grid-template-columns: 1.3fr 1fr 1fr; } }
+@media (min-width: 760px) {
+  .hero { grid-template-columns: repeat(3, 1fr); }
+  .hero > .card:first-child { grid-column: 1 / -1; } /* BTC на цял ред, отдолу MSTR · ASST · злато */
+}
 .asset-head { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
 .asset-head .badge { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; color: #fff; }
 .big { font-size: 38px; font-weight: 780; letter-spacing: -1px; font-variant-numeric: tabular-nums; margin: 4px 0 0; transition: color .4s; }

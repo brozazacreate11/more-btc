@@ -56,7 +56,17 @@
         <div class="row small muted" style="margin-top:10px">
           <span>mNAV: <b id="mnavTxt">—</b></span><span>·</span><span><span data-i18n="btcPerShare">BTC/акция</span>: <b id="bpsTxt">—</b></span>
         </div>
-        <div class="small muted" id="mstrNote" style="margin-top:6px"></div>
+        <div class="small muted" id="holdM" style="margin-top:6px"></div>
+        <div class="small muted" id="mstrNote" style="margin-top:4px"></div>
+      </div>
+      <div class="card">
+        <div class="asset-head"><span class="badge" style="background:#2b59c3">S</span>Strive · ASST</div>
+        <div class="mid" id="asstUsd">—</div>
+        <div class="row" style="margin-top:6px"><span class="sub" id="asstEur">—</span><span class="chip" id="asstChg">—</span></div>
+        <div class="row small muted" style="margin-top:10px">
+          <span>mNAV: <b id="mnavA">—</b></span><span>·</span><span><span data-i18n="btcPerShare">BTC/акция</span>: <b id="bpsA">—</b></span>
+        </div>
+        <div class="small muted" id="holdA" style="margin-top:6px"></div>
       </div>
       <div class="card">
         <div class="asset-head"><span class="badge" style="background:#d4af37">Au</span><span data-i18n="gold.title">Злато · XAU</span></div>
@@ -322,7 +332,11 @@
     <div class="small muted" id="keyStatus" style="margin-top:6px"></div>
 
     <h3 data-i18n="set.hold">Strategy (MSTR): брой биткойни</h3>
-    <div class="row"><div class="field" style="flex:1"><input id="setHold" type="text" inputmode="decimal" autocomplete="off"></div><button class="btn sm ghost" id="saveHold" data-i18n="save">Запази</button></div>
+    <div class="row" style="align-items:flex-end">
+      <div class="field" style="flex:1"><label>Strategy (MSTR)</label><input id="setHoldM" type="text" inputmode="decimal" autocomplete="off"></div>
+      <div class="field" style="flex:1"><label>Strive (ASST)</label><input id="setHoldA" type="text" inputmode="decimal" autocomplete="off"></div>
+      <button class="btn sm ghost" id="saveHold" data-i18n="save">Запази</button>
+    </div>
     <p class="small muted" data-i18n="set.hold.hint">Използва се за mNAV и BTC на акция. Актуалната стойност е на strategy.com.</p>
 
     <h3 data-i18n="set.alerts">Аларми</h3>
@@ -330,6 +344,7 @@
       <div class="field" style="flex:2"><select id="alType">
         <option value="btc_above" data-i18n="al.btc_above">BTC над $</option><option value="btc_below" data-i18n="al.btc_below">BTC под $</option>
         <option value="mstr_above" data-i18n="al.mstr_above">MSTR над $</option><option value="mstr_below" data-i18n="al.mstr_below">MSTR под $</option>
+        <option value="asst_above" data-i18n="al.asst_above">ASST над $</option><option value="asst_below" data-i18n="al.asst_below">ASST под $</option>
         <option value="fng_below" data-i18n="al.fng_below">Fear &amp; Greed под</option><option value="score_below" data-i18n="al.score_below">Сигнал под</option><option value="score_above" data-i18n="al.score_above">Сигнал над</option>
       </select></div>
       <div class="field" style="flex:1"><input id="alVal" type="text" inputmode="decimal" autocomplete="off" data-i18n-ph="set.al.ph"></div>
