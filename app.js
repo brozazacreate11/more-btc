@@ -1,6 +1,6 @@
 'use strict';
 /* More BTC: всичко работи в браузъра. Личните данни са само в localStorage на устройството. */
-const APP_VERSION = '5'; // същият номер като CACHE в sw.js
+const APP_VERSION = '6'; // същият номер като CACHE в sw.js
 
 // ============================================================ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -847,10 +847,18 @@ function livePrice(asset, cur) {
   return cur === 'EUR' ? u / fx : u;
 }
 const unitOf = a => a === 'BTC' ? 'BTC' : a === 'GOLD' ? tr('unit.g') : tr('unit.shares');
-const fmtQty = (a, q) => a === 'BTC' ? fmtBtc(q) : nf(q, a === 'GOLD' ? 2 : 4);
+// количество без излишни нули, като в Revolut: „14,41 ASST“
+const fmtQty = (a, q) => Number(q).toLocaleString(loc(), { minimumFractionDigits: 0, maximumFractionDigits: a === 'BTC' ? 8 : a === 'GOLD' ? 2 : 4 });
+const qtyLabel = a => a === 'GOLD' ? tr('unit.g') : a; // BTC, MSTR, ASST, гр.
+const priceDec = a => a === 'BTC' ? 0 : 2;
+// ред 1: количество и текуща цена (като в Revolut); ред 2: средна покупна цена и печалба/загуба
 function posSub(a) {
+  const p = portfolio[a];
+  return `${fmtQty(a, p.qty)} ${qtyLabel(a)} · ${money(livePrice(a, p.cur), p.cur, priceDec(a))}`;
+}
+function posPl(a) {
   const p = portfolio[a], pnl = p.qty * (livePrice(a, p.cur) - p.avg);
-  return `${money(pnl, p.cur)} · ${fmtQty(a, p.qty)} ${unitOf(a)} · ${tr('pf.avg', { p: money(p.avg, p.cur) })}`;
+  return `${tr('pf.avg', { p: money(p.avg, p.cur, priceDec(a)) })} · ${tr('pf.pnl', { p: money(pnl, p.cur, 2) })}`;
 }
 function posForm(asset) {
   const meta = ASSETS[asset], p = portfolio[asset], el = $('#pos' + asset), unit = unitOf(asset);
@@ -861,6 +869,7 @@ function posForm(asset) {
     <span class="chip ${pnl >= 0 ? 'up' : 'down'}">${p.qty ? pct(pp) : '—'}</span></div>
     <div class="mid">${p.qty ? money(value, p.cur) : '—'}</div>
     <div class="sub">${p.qty ? posSub(asset) : tr('pf.enter')}</div>
+    <div class="small muted pl" style="margin-top:2px">${p.qty ? posPl(asset) : ''}</div>
     ${asset === 'MSTR' && p.qty && Live.shares ? `<div class="small muted" style="margin-top:4px">${tr('pf.exposure', { b: fmtBtc(p.qty * settings.holdings / Live.shares) })}</div>` : ''}
     ${asset === 'GOLD' ? `<div class="small muted" style="margin-top:4px">${tr('gold.note', { p: money(price, p.cur, 2) })}</div>` : ''}
     <h3>${tr('pf.edit')}</h3>
@@ -1126,6 +1135,7 @@ function posFormLight() {
     $('.mid', el).textContent = money(value, p.cur);
     const chip = $('.chip', el); chip.textContent = pct(cost ? (value / cost - 1) * 100 : 0); chip.className = 'chip ' + (pnl >= 0 ? 'up' : 'down');
     $('.sub', el).textContent = posSub(a);
+    $('.pl', el).textContent = posPl(a);
   }
 }
 

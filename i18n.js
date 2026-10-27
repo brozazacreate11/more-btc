@@ -305,7 +305,8 @@ const STR = {
   // ---------- портфолио
   'pf.total': ['Общо портфолио', 'Total portfolio', 'Gesamtportfolio'],
   'pf.disc': ['Данните за портфолиото се пазят само на това устройство. Не се изпращат никъде. Направи си резервно копие от ⚙️ Настройки.', 'Portfolio data is stored only on this device and is never sent anywhere. Make a backup in ⚙️ Settings.', 'Die Portfoliodaten werden nur auf diesem Gerät gespeichert und nirgendwohin gesendet. Erstelle ein Backup unter ⚙️ Einstellungen.'],
-  'pf.avg': ['средна {p}', 'avg {p}', 'Ø {p}'],
+  'pf.avg': ['средна цена {p}', 'avg. price {p}', 'Ø-Kaufpreis {p}'],
+  'pf.pnl': ['печалба/загуба {p}', 'P/L {p}', 'G/V {p}'],
   'pf.enter': ['Въведи позицията си отдолу', 'Enter your position below', 'Gib deine Position unten ein'],
   'pf.exposure': ['≈ {b} BTC експозиция през Strategy', '≈ {b} BTC exposure via Strategy', '≈ {b} BTC Exposure über Strategy'],
   'pf.edit': ['Редактирай позицията', 'Edit position', 'Position bearbeiten'],
